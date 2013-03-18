@@ -500,7 +500,7 @@ tokenize_attr_value(Attr, B, S) ->
         _ ->
             {Attr, S1}
     end.
-    
+
 tokenize_quoted_or_unquoted_attr_value(B, S=#decoder{offset=O}) ->
     case B of
         <<_:O/binary>> ->
@@ -511,7 +511,7 @@ tokenize_quoted_or_unquoted_attr_value(B, S=#decoder{offset=O}) ->
         <<_:O/binary, _/binary>> ->
             tokenize_unquoted_attr_value(B, S, [])
     end.
-    
+
 tokenize_quoted_attr_value(B, S=#decoder{offset=O}, Acc, Q) ->
     case B of
         <<_:O/binary>> ->
@@ -524,7 +524,7 @@ tokenize_quoted_attr_value(B, S=#decoder{offset=O}, Acc, Q) ->
         <<_:O/binary, C, _/binary>> ->
             tokenize_quoted_attr_value(B, ?INC_COL(S), [C|Acc], Q)
     end.
-    
+
 tokenize_unquoted_attr_value(B, S=#decoder{offset=O}, Acc) ->
     case B of
         <<_:O/binary>> ->
@@ -538,7 +538,7 @@ tokenize_unquoted_attr_value(B, S=#decoder{offset=O}, Acc) ->
             { iolist_to_binary(lists:reverse(Acc)), S };
         <<_:O/binary, C, _/binary>> ->
             tokenize_unquoted_attr_value(B, ?INC_COL(S), [C|Acc])
-    end.   
+    end.
 
 skip_whitespace(B, S=#decoder{offset=O}) ->
     case B of
@@ -621,13 +621,17 @@ find_gt(Bin, S=#decoder{offset=O}, HasSlash) ->
     end.
 
 tokenize_charref(Bin, S=#decoder{offset=O}) ->
-    tokenize_charref(Bin, S, O).
+    try
+        tokenize_charref(Bin, S, O)
+    catch
+        throw:invalid_charref ->
+            {{data, <<"&">>, false}, S}
+    end.
 
 tokenize_charref(Bin, S=#decoder{offset=O}, Start) ->
     case Bin of
         <<_:O/binary>> ->
-            <<_:Start/binary, Raw/binary>> = Bin,
-            {{data, Raw, false}, S};
+            throw(invalid_charref);
         <<_:O/binary, C, _/binary>> when ?IS_WHITESPACE(C)
                                          orelse C =:= ?SQUOTE
                                          orelse C =:= ?QUOTE
@@ -652,12 +656,11 @@ tokenize_charref(Bin, S=#decoder{offset=O}, Start) ->
             <<_:Start/binary, Raw:Len/binary, _/binary>> = Bin,
             Data = case mochiweb_charref:charref(Raw) of
                        undefined ->
-                           Start1 = Start - 1,
-                           Len1 = Len + 2,
-                           <<_:Start1/binary, R:Len1/binary, _/binary>> = Bin,
-                           R;
-                       Unichar ->
-                           mochiutf8:codepoint_to_bytes(Unichar)
+                           throw(invalid_charref);
+                       Unichar when is_integer(Unichar) ->
+                           mochiutf8:codepoint_to_bytes(Unichar);
+                       Unichars when is_list(Unichars) ->
+                           unicode:characters_to_binary(Unichars)
                    end,
             {{data, Data, false}, ?INC_COL(S)};
         _ ->
@@ -1235,14 +1238,12 @@ parse_unquoted_attr_test() ->
             { <<"img">>, [ { <<"src">>, <<"/images/icon.png">> } ], [] }
         ]},
         mochiweb_html:parse(D0)),
-    
     D1 = <<"<html><img src=/images/icon.png></img></html>">>,
         ?assertEqual(
             {<<"html">>,[],[
                 { <<"img">>, [ { <<"src">>, <<"/images/icon.png">> } ], [] }
             ]},
             mochiweb_html:parse(D1)),
-    
     D2 = <<"<html><img src=/images/icon&gt;.png width=100></img></html>">>,
         ?assertEqual(
             {<<"html">>,[],[
@@ -1258,7 +1259,7 @@ parse_quoted_attr_test() ->
             { <<"img">>, [ { <<"src">>, <<"/images/icon.png">> } ], [] }
         ]},
         mochiweb_html:parse(D0)),     
-        
+
     D1 = <<"<html><img src=\"/images/icon.png'></html>">>,
     ?assertEqual(
         {<<"html">>,[],[
@@ -1271,7 +1272,7 @@ parse_quoted_attr_test() ->
         {<<"html">>,[],[
             { <<"img">>, [ { <<"src">>, <<"/images/icon>.png">> } ], [] }
         ]},
-        mochiweb_html:parse(D2)),     
+        mochiweb_html:parse(D2)),
 
     %% Quoted attributes can contain whitespace and newlines
     D3 = <<"<html><a href=\"#\" onclick=\"javascript: test(1,\ntrue);\"></html>">>,
@@ -1401,6 +1402,24 @@ parse_charref_garbage_in_garbage_out_test() ->
     
     ok.
 
+parse_amp_test_() ->
+    [?_assertEqual(
+       {<<"html">>,[],
+        [{<<"body">>,[{<<"onload">>,<<"javascript:A('1&2')">>}],[]}]},
+       mochiweb_html:parse("<html><body onload=\"javascript:A('1&2')\"></body></html>")),
+     ?_assertEqual(
+        {<<"html">>,[],
+         [{<<"body">>,[{<<"onload">>,<<"javascript:A('1& 2')">>}],[]}]},
+        mochiweb_html:parse("<html><body onload=\"javascript:A('1& 2')\"></body></html>")),
+     ?_assertEqual(
+        {<<"html">>,[],
+         [{<<"body">>,[],[<<"& ">>]}]},
+        mochiweb_html:parse("<html><body>& </body></html>")),
+     ?_assertEqual(
+        {<<"html">>,[],
+         [{<<"body">>,[],[<<"&">>]}]},
+        mochiweb_html:parse("<html><body>&</body></html>"))].
+
 parse_unescaped_lt_test() ->
     D1 = <<"<div> < < <a href=\"/\">Back</a></div>">>,
     ?assertEqual(
@@ -1414,9 +1433,4 @@ parse_unescaped_lt_test() ->
                                       [<<"Back">>]}]},
     mochiweb_html:parse(D2)).
 
-
-
-
-
-    
 -endif.

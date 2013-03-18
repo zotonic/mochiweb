@@ -116,16 +116,19 @@ quote(V0) ->
         orelse erlang:error({cookie_quoting_required, V}),
     V.
 
-add_seconds(Secs, LocalTime) ->
-    Greg = calendar:datetime_to_gregorian_seconds(LocalTime),
-    calendar:gregorian_seconds_to_datetime(Greg + Secs).
-
 
 %% Return a date in the form of: Wdy, DD-Mon-YYYY HH:MM:SS GMT
-%% See also: rfc2109: 10.1.2 
+%% See also: rfc2109: 10.1.2
 rfc2109_cookie_expires_date(LocalTime) ->
     {{YYYY,MM,DD},{Hour,Min,Sec}} =
         case calendar:local_time_to_universal_time_dst(LocalTime) of
+            [] ->
+                {Date, {Hour1, Min1, Sec1}} = LocalTime,
+                LocalTime2 = {Date, {Hour1 + 1, Min1, Sec1}},
+                case calendar:local_time_to_universal_time_dst(LocalTime2) of
+                    [Gmt]   -> Gmt;
+                    [_,Gmt] -> Gmt
+                end;
             [Gmt]   -> Gmt;
             [_,Gmt] -> Gmt
         end,
@@ -133,6 +136,10 @@ rfc2109_cookie_expires_date(LocalTime) ->
     lists:flatten(
       io_lib:format("~s, ~2.2.0w-~3.s-~4.4.0w ~2.2.0w:~2.2.0w:~2.2.0w GMT",
                     [httpd_util:day(DayNumber),DD,httpd_util:month(MM),YYYY,Hour,Min,Sec])).
+
+add_seconds(Secs, LocalTime) ->
+    Greg = calendar:datetime_to_gregorian_seconds(LocalTime),
+    calendar:gregorian_seconds_to_datetime(Greg + Secs).
 
 age_to_cookie_date(Age, LocalTime) ->
     rfc2109_cookie_expires_date(add_seconds(Age, LocalTime)).
