@@ -1,0 +1,15 @@
+
+MW20130318:
+
+This mochiweb version is tracking origin till:
+
+  https://github.com/mochi/mochiweb/commit/f3f133bbfd580730d31a1c9cf54496708f6a8284
+
+Changes compared with origin are:
+
+ * mochiweb_html additions/changes
+ * we support separate any/any6 options
+ * any6 listens to ipv6 with extra options
+ * added SSL timeouts
+
+
