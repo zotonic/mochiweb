@@ -71,7 +71,9 @@ request(Socket, Body) ->
             % R15B02 returns this then closes the socket, so close and exit
             mochiweb_socket:close(Socket),
             exit(normal);
-        _Other ->
+        Other ->
+            error_logger:error_report([{application, mochiweb},
+                                       "Request failed", lists:flatten(io_lib:format("~p", [Other]))]),
             handle_invalid_request(Socket)
     after ?REQUEST_RECV_TIMEOUT ->
         mochiweb_socket:close(Socket),
@@ -85,6 +87,7 @@ reentry(Body) ->
 
 headers(Socket, Request, Headers, _Body, ?MAX_HEADERS) ->
     %% Too many headers sent, bad request.
+    error_logger:error_report([{application, mochiweb}, "Too many headers sent, bad request", Headers]),
     ok = mochiweb_socket:setopts(Socket, [{packet, raw}]),
     handle_invalid_request(Socket, Request, Headers);
 headers(Socket, Request, Headers, Body, HeaderCount) ->
@@ -104,7 +107,9 @@ headers(Socket, Request, Headers, Body, HeaderCount) ->
             % R15B02 returns this then closes the socket, so close and exit
             mochiweb_socket:close(Socket),
             exit(normal);
-        _Other ->
+        Other ->
+            error_logger:error_report([{application, mochiweb}, "Headers failed",
+                                       lists:flatten(io_lib:format("~p", [Other])), Headers]),
             handle_invalid_request(Socket, Request, Headers)
     after ?HEADERS_RECV_TIMEOUT ->
         mochiweb_socket:close(Socket),
