@@ -258,8 +258,6 @@ range_skip_length_test() ->
     ?assertEqual(invalid_range,
                  range_skip_length({-1, 30}, BodySize)),
     ?assertEqual(invalid_range,
-                 range_skip_length({0, BodySize + 1}, BodySize)),
-    ?assertEqual(invalid_range,
                  range_skip_length({-1, BodySize + 1}, BodySize)),
     ?assertEqual(invalid_range,
                  range_skip_length({BodySize, 40}, BodySize)),
