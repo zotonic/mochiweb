@@ -35,6 +35,9 @@
 -define(IS_LITERAL_SAFE(C),
         ((C >= $A andalso C =< $Z) orelse (C >= $a andalso C =< $z)
          orelse (C >= $0 andalso C =< $9))).
+-define(IS_START_LITERAL_SAFE(C),
+        ((C >= $A andalso C =< $Z) orelse (C >= $a andalso C =< $z) 
+         orelse (C == $_))).
 -define(PROBABLE_CLOSE(C),
         (C =:= $> orelse ?IS_WHITESPACE(C))).
 
@@ -329,7 +332,7 @@ tokenize(B, S=#decoder{offset=O}) ->
             {S2, _} = find_gt(B, S1),
             {{end_tag, Tag}, S2};
         <<_:O/binary, "<", C, _/binary>> 
-                when ?IS_WHITESPACE(C); not ?IS_LITERAL_SAFE(C) ->
+                when ?IS_WHITESPACE(C); not ?IS_START_LITERAL_SAFE(C) ->
             %% This isn't really strict HTML
             {{data, Data, _Whitespace}, S1} = tokenize_data(B, ?INC_COL(S)),
             {{data, <<$<, Data/binary>>, false}, S1};
@@ -917,6 +920,12 @@ tokens_test() ->
        [{data, <<"not html ">>, false},
         {data, <<"< at all">>, false}],
        tokens(<<"not html < at all">>)),
+
+    %% Not a tag because tags can't start with a number.
+    ?assertEqual(
+       [{data, <<"a ">>, false},
+        {data, <<"<100">>, false}],
+        tokens(<<"a <100">>)),
     ok.
 
 parse_test() ->
