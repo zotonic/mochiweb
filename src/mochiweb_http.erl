@@ -71,7 +71,7 @@ request(Socket, Body) ->
             % R15B02 returns this then closes the socket, so close and exit
             mochiweb_socket:close(Socket),
             exit(normal);
-        Other ->
+        Other when is_tuple(Other) andalso is_port(element(2, Other)) ->
             error_logger:error_report([{application, mochiweb},
                                        "Request failed", lists:flatten(io_lib:format("~p", [Other]))]),
             handle_invalid_request(Socket)
@@ -107,7 +107,7 @@ headers(Socket, Request, Headers, Body, HeaderCount) ->
             % R15B02 returns this then closes the socket, so close and exit
             mochiweb_socket:close(Socket),
             exit(normal);
-        Other ->
+        Other when is_tuple(Other) andalso is_port(element(2, Other)) ->
             error_logger:error_report([{application, mochiweb}, "Headers failed",
                                        lists:flatten(io_lib:format("~p", [Other])), Headers]),
             handle_invalid_request(Socket, Request, Headers)

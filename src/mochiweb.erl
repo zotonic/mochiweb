@@ -90,6 +90,7 @@ ssl_cert_opts() ->
     KeyFile = filename:join(CertDir, "test_ssl_key.pem"),
     [{certfile, CertFile}, {keyfile, KeyFile}].
 
+
 with_server(Transport, ServerFun, ClientFun) ->
     ServerOpts0 = [{ip, "127.0.0.1"}, {port, 0}, {loop, ServerFun}],
     ServerOpts = case Transport of
@@ -162,6 +163,27 @@ hundred_128_http_POST_test_() -> % note the underscore
 hundred_128_https_POST_test_() -> % note the underscore
     {timeout, ?LARGE_TIMEOUT,
      fun() -> ?assertEqual(ok, do_POST(ssl, 128, 100)) end}.
+
+selective_receive_test() ->
+    Times = 10,
+    Transport = plain,
+    PathPrefix = "/whatever/",
+    ReplyPrefix = "You requested: ",
+    ServerFun = fun(Req) ->
+                    %% Let the server fun send a message to itself... It should not
+                    %% not influence receiving of normal socket messages.
+                    self() ! bla_bla,
+                    Reply = ReplyPrefix ++ Req:get(path),
+                    Req:ok({"text/plain", Reply})
+                end,
+    TestReqs = [begin
+                    Path = PathPrefix ++ integer_to_list(N),
+                    ExpectedReply = list_to_binary(ReplyPrefix ++ Path),
+                    #treq{path=Path, xreply=ExpectedReply}
+                end || N <- lists:seq(1, Times)],
+    ClientFun = new_client_fun('GET', TestReqs),
+    ok = with_server(Transport, ServerFun, ClientFun),
+    ok.
 
 do_GET(Transport, Times) ->
     PathPrefix = "/whatever/",
