@@ -204,6 +204,8 @@ escape(">" ++ Rest, Acc) ->
     escape(Rest, lists:reverse("&gt;", Acc));
 escape("&" ++ Rest, Acc) ->
     escape(Rest, lists:reverse("&amp;", Acc));
+escape([16#c2, 16#a0] ++ Rest, Acc) ->
+    escape(Rest, lists:reverse("&nbsp;", Acc));
 escape([C | Rest], Acc) ->
     escape(Rest, [C | Acc]).
 
@@ -217,6 +219,8 @@ escape_attr("&" ++ Rest, Acc) ->
     escape_attr(Rest, lists:reverse("&amp;", Acc));
 escape_attr([?QUOTE | Rest], Acc) ->
     escape_attr(Rest, lists:reverse("&quot;", Acc));
+escape_attr([16#c2, 16#a0] ++ Rest, Acc) ->
+    escape_attr(Rest, lists:reverse("&nbsp;", Acc));
 escape_attr([C | Rest], Acc) ->
     escape_attr(Rest, [C | Acc]).
 
@@ -835,6 +839,9 @@ escape_test() ->
     ?assertEqual(
        <<"&amp;quot;\"word &gt;&lt;&lt;up!&amp;quot;">>,
        escape('&quot;\"word ><<up!&quot;')),
+    ?assertEqual(
+       <<"pre&nbsp;post">>,
+       escape(<<"pre", 16#c2, 16#a0, "post">>)),
     ok.
 
 escape_attr_test() ->
@@ -853,6 +860,9 @@ escape_attr_test() ->
     ?assertEqual(
        <<"1.5">>,
        escape_attr(1.5)),
+    ?assertEqual(
+       <<"pre&nbsp;post">>,
+       escape_attr(<<"pre", 16#c2, 16#a0, "post">>)),
     ok.
 
 tokens_test() ->
