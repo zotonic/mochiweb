@@ -389,7 +389,12 @@ norm({Tag, Attrs}) ->
 norm(Tag) when is_binary(Tag) ->
     Tag;
 norm(Tag) ->
-    list_to_binary(string:to_lower(Tag)).
+    BTag = list_to_binary(Tag),
+    LTag = mochiweb_util:to_lower(BTag),
+    case is_html_tag(LTag) of 
+        true -> LTag;
+        false -> BTag
+    end.
 
 stack(T1={TN, _, _}, Stack=[{TN, _, _} | _Rest])
   when TN =:= <<"li">> orelse TN =:= <<"option">> ->
@@ -564,22 +569,28 @@ tokenize_literal(Bin, S=#decoder{offset=O}) ->
             %% 0 chars. http://github.com/mochi/mochiweb/pull/13
             {[C], ?INC_COL(S)};
         _ ->
-            tokenize_literal(Bin, S, [])
+            tokenize_literal(Bin, S, <<>>)
     end.
 
 tokenize_literal(Bin, S=#decoder{offset=O}, Acc) ->
     case Bin of
         <<_:O/binary, $&, _/binary>> ->
             {{data, Data, false}, S1} = tokenize_charref(Bin, ?INC_COL(S)),
-            tokenize_literal(Bin, S1, [Data | Acc]);
+            tokenize_literal(Bin, S1, <<Acc/binary, Data/binary>>);
         <<_:O/binary, C, _/binary>> when not (?IS_WHITESPACE(C)
                                               orelse C =:= $>
                                               orelse C =:= $/
                                               orelse C =:= $=) ->
-            tokenize_literal(Bin, ?INC_COL(S), [C | Acc]);
+            tokenize_literal(Bin, ?INC_COL(S), <<Acc/binary, C>>);
         _ ->
-            {iolist_to_binary(string:to_lower(lists:reverse(Acc))), S}
+            LAcc = mochiweb_util:to_lower(Acc),
+            Acc1 = case is_html_literal(LAcc) of
+                true -> LAcc;
+                false -> Acc
+            end,
+            {Acc1, S}
     end.
+
 
 raw_qgt(Bin, S=#decoder{offset=O}) ->
     raw_qgt(Bin, S, O).
@@ -794,6 +805,301 @@ tokenize_textarea(Bin, S=#decoder{offset=O}, Start) ->
             {{data, Raw, false}, S}
     end.
 
+% @doc Returns true when Lit is a html literal
+is_html_literal(Lit) ->
+    is_html_tag(Lit) orelse is_html_attr(Lit).
+
+% @doc Return true when Tag is a html tag.
+% A
+is_html_tag(<<"a">>) -> true;
+is_html_tag(<<"abbr">>) -> true;
+is_html_tag(<<"acronym">>) -> true;
+is_html_tag(<<"address">>) -> true;
+is_html_tag(<<"applet">>) -> true;
+is_html_tag(<<"area">>) -> true;
+is_html_tag(<<"article">>) -> true;
+is_html_tag(<<"aside">>) -> true;
+is_html_tag(<<"audio">>) -> true;
+% B
+is_html_tag(<<"b">>) -> true;
+is_html_tag(<<"base">>) -> true;
+is_html_tag(<<"basefont">>) -> true;
+is_html_tag(<<"bdi">>) -> true;
+is_html_tag(<<"bdo">>) -> true;
+is_html_tag(<<"bgsound">>) -> true;
+is_html_tag(<<"big">>) -> true;
+is_html_tag(<<"blink">>) -> true;
+is_html_tag(<<"blockquote">>) -> true;
+is_html_tag(<<"body">>) -> true;
+is_html_tag(<<"br">>) -> true;
+is_html_tag(<<"button">>) -> true;
+% C
+is_html_tag(<<"canvas">>) -> true;
+is_html_tag(<<"caption">>) -> true;
+is_html_tag(<<"center">>) -> true;
+is_html_tag(<<"cite">>) -> true;
+is_html_tag(<<"code">>) -> true;
+is_html_tag(<<"col">>) -> true;
+is_html_tag(<<"colgroup">>) -> true;
+is_html_tag(<<"content">>) -> true;
+% D
+is_html_tag(<<"data">>) -> true;
+is_html_tag(<<"datalist">>) -> true;
+is_html_tag(<<"dd">>) -> true;
+is_html_tag(<<"decorator">>) -> true;
+is_html_tag(<<"del">>) -> true;
+is_html_tag(<<"details">>) -> true;
+is_html_tag(<<"dfn">>) -> true;
+is_html_tag(<<"dir">>) -> true;
+is_html_tag(<<"div">>) -> true;
+is_html_tag(<<"dl">>) -> true;
+is_html_tag(<<"dt">>) -> true;
+% E
+is_html_tag(<<"element">>) -> true;
+is_html_tag(<<"em">>) -> true;
+is_html_tag(<<"embed">>) -> true;
+% F
+is_html_tag(<<"fieldset">>) -> true;
+is_html_tag(<<"figcaption">>) -> true;
+is_html_tag(<<"figure">>) -> true;
+is_html_tag(<<"font">>) -> true;
+is_html_tag(<<"footer">>) -> true;
+is_html_tag(<<"form">>) -> true;
+is_html_tag(<<"frame">>) -> true;
+is_html_tag(<<"frameset">>) -> true;
+% G H
+is_html_tag(<<"h1">>) -> true;
+is_html_tag(<<"h2">>) -> true;
+is_html_tag(<<"h3">>) -> true;
+is_html_tag(<<"h4">>) -> true;
+is_html_tag(<<"h5">>) -> true;
+is_html_tag(<<"h6">>) -> true;
+is_html_tag(<<"head">>) -> true;
+is_html_tag(<<"header">>) -> true;
+is_html_tag(<<"hgroup">>) -> true;
+is_html_tag(<<"hr">>) -> true;
+is_html_tag(<<"html">>) -> true;
+% I
+is_html_tag(<<"i">>) -> true;
+is_html_tag(<<"iframe">>) -> true;
+is_html_tag(<<"img">>) -> true;
+is_html_tag(<<"input">>) -> true;
+is_html_tag(<<"ins">>) -> true;
+is_html_tag(<<"isindex">>) -> true;
+% J K
+is_html_tag(<<"kbd">>) -> true;
+is_html_tag(<<"keygen">>) -> true;
+% L
+is_html_tag(<<"label">>) -> true;
+is_html_tag(<<"legend">>) -> true;
+is_html_tag(<<"li">>) -> true;
+is_html_tag(<<"link">>) -> true;
+is_html_tag(<<"listing">>) -> true;
+% M
+is_html_tag(<<"main">>) -> true;
+is_html_tag(<<"map">>) -> true;
+is_html_tag(<<"mark">>) -> true;
+is_html_tag(<<"marquee">>) -> true;
+is_html_tag(<<"menu">>) -> true;
+is_html_tag(<<"menuitem">>) -> true;
+is_html_tag(<<"meta">>) -> true;
+is_html_tag(<<"meter">>) -> true;
+% N
+is_html_tag(<<"nav">>) -> true;
+is_html_tag(<<"nobr">>) -> true;
+is_html_tag(<<"noframes">>) -> true;
+is_html_tag(<<"noscript">>) -> true;
+% O
+is_html_tag(<<"object">>) -> true;
+is_html_tag(<<"ol">>) -> true;
+is_html_tag(<<"optgroup">>) -> true;
+is_html_tag(<<"option">>) -> true;
+is_html_tag(<<"output">>) -> true;
+% P
+is_html_tag(<<"p">>) -> true;
+is_html_tag(<<"param">>) -> true;
+is_html_tag(<<"plaintext">>) -> true;
+is_html_tag(<<"pre">>) -> true;
+is_html_tag(<<"progress">>) -> true;
+% Q
+is_html_tag(<<"q">>) -> true;
+% R
+is_html_tag(<<"rp">>) -> true;
+is_html_tag(<<"rt">>) -> true;
+is_html_tag(<<"ruby">>) -> true;
+% S
+is_html_tag(<<"s">>) -> true;
+is_html_tag(<<"samp">>) -> true;
+is_html_tag(<<"script">>) -> true;
+is_html_tag(<<"section">>) -> true;
+is_html_tag(<<"select">>) -> true;
+is_html_tag(<<"shadow">>) -> true;
+is_html_tag(<<"small">>) -> true;
+is_html_tag(<<"source">>) -> true;
+is_html_tag(<<"spacer">>) -> true;
+is_html_tag(<<"span">>) -> true;
+is_html_tag(<<"strike">>) -> true;
+is_html_tag(<<"strong">>) -> true;
+is_html_tag(<<"style">>) -> true;
+is_html_tag(<<"sub">>) -> true;
+is_html_tag(<<"summary">>) -> true;
+is_html_tag(<<"sup">>) -> true;
+% T
+is_html_tag(<<"table">>) -> true;
+is_html_tag(<<"tbody">>) -> true;
+is_html_tag(<<"td">>) -> true;
+is_html_tag(<<"template">>) -> true;
+is_html_tag(<<"textarea">>) -> true;
+is_html_tag(<<"tfoot">>) -> true;
+is_html_tag(<<"th">>) -> true;
+is_html_tag(<<"thead">>) -> true;
+is_html_tag(<<"time">>) -> true;
+is_html_tag(<<"title">>) -> true;
+is_html_tag(<<"tr">>) -> true;
+is_html_tag(<<"track">>) -> true;
+is_html_tag(<<"tt">>) -> true;
+% U
+is_html_tag(<<"u">>) -> true;
+is_html_tag(<<"ul">>) -> true;
+% V
+is_html_tag(<<"var">>) -> true;
+is_html_tag(<<"video">>) -> true;
+% W
+is_html_tag(<<"wbr">>) -> true;
+% X Y Z
+is_html_tag(<<"xmp">>) -> true;
+% Everything else
+is_html_tag(_) -> false.
+
+% @doc Returns true when Attr is a html attribute.
+is_html_attr(<<"accept">>) -> true; 
+is_html_attr(<<"accept-charset">>) -> true;
+is_html_attr(<<"accesskey">>) -> true;
+is_html_attr(<<"action">>) -> true;  
+is_html_attr(<<"align">>) -> true;  
+is_html_attr(<<"alt">>) -> true; 
+is_html_attr(<<"async">>) -> true;   
+is_html_attr(<<"autocomplete">>) -> true;
+is_html_attr(<<"autofocus">>) -> true;
+is_html_attr(<<"autoplay">>) -> true;
+% B
+is_html_attr(<<"bgcolor">>) -> true;
+is_html_attr(<<"border">>) -> true;
+is_html_attr(<<"buffered">>) -> true;
+% C
+is_html_attr(<<"challenge">>) -> true;
+is_html_attr(<<"charset">>) -> true;
+is_html_attr(<<"checked">>) -> true;
+is_html_attr(<<"cite">>) -> true;
+is_html_attr(<<"class">>) -> true;
+is_html_attr(<<"code">>) -> true;
+is_html_attr(<<"codebase">>) -> true;
+is_html_attr(<<"color">>) -> true;
+is_html_attr(<<"cols">>) -> true;   
+is_html_attr(<<"colspan">>) -> true;
+is_html_attr(<<"content">>) -> true;
+is_html_attr(<<"contenteditable">>) -> true;
+is_html_attr(<<"contextmenu">>) -> true;
+is_html_attr(<<"controls">>) -> true;
+is_html_attr(<<"coords">>) -> true;
+% D
+is_html_attr(<<"data">>) -> true;
+is_html_attr(<<"data-", _Rest/binary>>) -> true;
+is_html_attr(<<"datetime">>) -> true;
+is_html_attr(<<"default">>) -> true;
+is_html_attr(<<"defer">>) -> true;
+is_html_attr(<<"dir">>) -> true;
+is_html_attr(<<"dirname">>) -> true;
+is_html_attr(<<"disabled">>) -> true;
+is_html_attr(<<"download">>) -> true;
+is_html_attr(<<"draggable">>) -> true;
+is_html_attr(<<"dropzone">>) -> true;
+% E
+is_html_attr(<<"enctype">>) -> true;
+% F
+is_html_attr(<<"for">>) -> true;
+is_html_attr(<<"form">>) -> true;
+is_html_attr(<<"headers">>) -> true;
+is_html_attr(<<"height">>) -> true;
+is_html_attr(<<"hidden">>) -> true;
+is_html_attr(<<"high">>) -> true;
+is_html_attr(<<"href">>) -> true;
+is_html_attr(<<"hreflang">>) -> true;
+is_html_attr(<<"http-equiv">>) -> true;
+% G H I
+is_html_attr(<<"icon">>) -> true;
+is_html_attr(<<"id">>) -> true;
+is_html_attr(<<"ismap">>) -> true;
+is_html_attr(<<"itemprop">>) -> true;
+% K
+is_html_attr(<<"keytype">>) -> true;
+is_html_attr(<<"kind">>) -> true;
+is_html_attr(<<"label">>) -> true;
+% L
+is_html_attr(<<"lang">>) -> true;
+is_html_attr(<<"language">>) -> true;
+is_html_attr(<<"list">>) -> true;
+is_html_attr(<<"loop">>) -> true;
+is_html_attr(<<"low">>) -> true; 
+% M
+is_html_attr(<<"manifest">>) -> true;
+is_html_attr(<<"max">>) -> true;
+is_html_attr(<<"maxlength">>) -> true;
+is_html_attr(<<"media">>) -> true;
+is_html_attr(<<"method">>) -> true;
+is_html_attr(<<"min">>) -> true;
+% N
+is_html_attr(<<"multiple">>) -> true;
+is_html_attr(<<"name">>) -> true;    
+is_html_attr(<<"novalidate">>) -> true;
+% O
+is_html_attr(<<"open">>) -> true;
+is_html_attr(<<"optimum">>) -> true;
+% P
+is_html_attr(<<"pattern">>) -> true;
+is_html_attr(<<"ping">>) -> true;
+is_html_attr(<<"placeholder">>) -> true;
+is_html_attr(<<"poster">>) -> true;
+is_html_attr(<<"preload">>) -> true; 
+is_html_attr(<<"pubdate">>) -> true;
+% Q R
+is_html_attr(<<"radiogroup">>) -> true;
+is_html_attr(<<"readonly">>) -> true;
+is_html_attr(<<"rel">>) -> true;
+is_html_attr(<<"required">>) -> true;
+is_html_attr(<<"reversed">>) -> true;
+is_html_attr(<<"rows">>) -> true;
+is_html_attr(<<"rowspan">>) -> true; 
+% S
+is_html_attr(<<"sandbox">>) -> true;
+is_html_attr(<<"spellcheck">>) -> true;
+is_html_attr(<<"scope">>) -> true;
+is_html_attr(<<"scoped">>) -> true; 
+is_html_attr(<<"seamless">>) -> true; 
+is_html_attr(<<"selected">>) -> true;
+is_html_attr(<<"shape">>) -> true;
+is_html_attr(<<"size">>) -> true;
+is_html_attr(<<"sizes">>) -> true; 
+is_html_attr(<<"span">>) -> true; 
+is_html_attr(<<"src">>) -> true;
+is_html_attr(<<"srcdoc">>) -> true;
+is_html_attr(<<"srclang">>) -> true;
+is_html_attr(<<"start">>) -> true;
+is_html_attr(<<"step">>) -> true;
+is_html_attr(<<"style">>) -> true;   
+is_html_attr(<<"summary">>) -> true; 
+% T
+is_html_attr(<<"tabindex">>) -> true; 
+is_html_attr(<<"target">>) -> true;  
+is_html_attr(<<"title">>) -> true;  
+is_html_attr(<<"type">>) -> true;  
+% U
+is_html_attr(<<"usemap">>) -> true;
+is_html_attr(<<"value">>) -> true;
+% W
+is_html_attr(<<"width">>) -> true; 
+is_html_attr(<<"wrap">>) -> true;   
+is_html_attr(_) -> false.
 
 %%
 %% Tests
@@ -1029,7 +1335,7 @@ parse_test() ->
                            {<<"br">>, [], []},
                            <<"bar">>]}]},
        parse(<<"<html><link>foo<br>bar</link></html>">>)),
-    %% Case insensitive tags
+    %% Case insensitive html tags and attributes.
     ?assertEqual(
        {<<"html">>, [],
         [{<<"head">>, [], [<<"foo">>,
@@ -1038,6 +1344,18 @@ parse_test() ->
          {<<"body">>, [{<<"class">>, <<"">>}, {<<"bgcolor">>, <<"#Aa01fF">>}], []}
         ]},
        parse(<<"<html><Head>foo<bR>BAR</head><body Class=\"\" bgcolor=\"#Aa01fF\"></BODY></html>">>)),
+
+    %% Case insensitive html tags and attributes mixed with case sensitive xml data islands.
+    ?assertEqual({<<"body">>,
+      [{<<"class">>,<<>>},{<<"bgcolor">>,<<"#Aa01fF">>}],
+      [{<<"xml">>,
+        [{<<"id">>,<<"data">>}],
+        [{<<"Score">>,
+          [{<<"Property">>,<<"test">>}],
+          [{<<"Player">>,[],[<<"Me">>]}]}]}]},
+       parse(<<"<body Class=\"\" bgcolor=\"#Aa01fF\"><xml id=\"data\"><Score Property='test'><Player>Me</Player></Score></xml></BODY>">>)),
+
+
     ok.
 
 exhaustive_is_singleton_test() ->

@@ -14,6 +14,7 @@
 -export([safe_relative_path/1, partition/2]).
 -export([parse_qvalues/1, pick_accepted_encodings/3]).
 -export([make_io/1]).
+-export([lchr/1, to_lower/1]).
 
 -define(PERCENT, 37).  % $\%
 -define(FULLSTOP, 46). % $\.
@@ -581,6 +582,43 @@ make_io(Integer) when is_integer(Integer) ->
 make_io(Io) when is_list(Io); is_binary(Io) ->
     Io.
 
+
+% @doc convert latin1 characters to lowercase.
+-spec lchr(char()) -> char().
+lchr($A) -> $a;
+lchr($B) -> $b;
+lchr($C) -> $c;
+lchr($D) -> $d;
+lchr($E) -> $e;
+lchr($F) -> $f;
+lchr($G) -> $g;
+lchr($H) -> $h;
+lchr($I) -> $i;
+lchr($J) -> $j;
+lchr($K) -> $k;
+lchr($L) -> $l;
+lchr($M) -> $m;
+lchr($N) -> $n;
+lchr($O) -> $o;
+lchr($P) -> $p;
+lchr($Q) -> $q;
+lchr($R) -> $r;
+lchr($S) -> $s;
+lchr($T) -> $t;
+lchr($U) -> $u;
+lchr($V) -> $v;
+lchr($W) -> $w;
+lchr($X) -> $x;
+lchr($Y) -> $y;
+lchr($Z) -> $z;
+lchr(Chr) -> Chr.
+
+% @doc Convert latin1 Bin to lowercase
+-spec to_lower(Bin :: binary()) -> binary().
+to_lower(Bin) ->
+    << <<(lchr(C))>> || <<C>> <= Bin >>.
+
+
 %%
 %% Tests
 %%
@@ -982,5 +1020,17 @@ pick_accepted_encodings_test() ->
         "identity"
     ),
     ok.
+
+%% Test if to_lower works.
+ascii_to_lower_test() ->
+    ?assertEqual(<<>>, to_lower(<<>>)),
+    ?assertEqual(<<"abc">>, to_lower(<<"abc">>)),
+    ?assertEqual(<<"abc">>, to_lower(<<"ABC">>)),
+    ?assertEqual(<<"1234567890abcdefghijklmnopqrstuvwxyz!@#$%^&*()">>,
+            to_lower(<<"1234567890abcdefghijklmnopqrstuvwxyz!@#$%^&*()">>)),
+    ?assertEqual(<<"1234567890abcdefghijklmnopqrstuvwxyz!@#$%^&*()">>,
+            to_lower(<<"1234567890ABCDEFGHIJKLMNOPQRSTUVWXYZ!@#$%^&*()">>)),
+    ok.
+
 
 -endif.
