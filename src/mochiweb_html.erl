@@ -325,14 +325,14 @@ tokenize(B, S=#decoder{offset=O}) ->
             {Body, S1} = raw_qgt(B, ?ADV_COL(S, 2)),
             {{pi, Body}, S1};
         <<_:O/binary, "<?", _/binary>> ->
-            {Tag, S1} = tokenize_literal(B, ?ADV_COL(S, 2)),
+            {Tag, S1} = tokenize_literal(B, ?ADV_COL(S, 2), tag),
             {Attrs, S2} = tokenize_attributes(B, S1),
             S3 = find_qgt(B, S2),
             {{pi, Tag, Attrs}, S3};
         <<_:O/binary, "&", _/binary>> ->
             tokenize_charref(B, ?INC_COL(S));
         <<_:O/binary, "</", _/binary>> ->
-            {Tag, S1} = tokenize_literal(B, ?ADV_COL(S, 2)),
+            {Tag, S1} = tokenize_literal(B, ?ADV_COL(S, 2), tag),
             {S2, _} = find_gt(B, S1),
             {{end_tag, Tag}, S2};
         <<_:O/binary, "<", C, _/binary>> 
@@ -341,7 +341,7 @@ tokenize(B, S=#decoder{offset=O}) ->
             {{data, Data, _Whitespace}, S1} = tokenize_data(B, ?INC_COL(S)),
             {{data, <<$<, Data/binary>>, false}, S1};
         <<_:O/binary, "<", _/binary>> ->
-            {Tag, S1} = tokenize_literal(B, ?INC_COL(S)),
+            {Tag, S1} = tokenize_literal(B, ?INC_COL(S), tag),
             {Attrs, S2} = tokenize_attributes(B, S1),
             {S3, HasSlash} = find_gt(B, S2),
             Singleton = HasSlash orelse is_singleton(Tag),
@@ -497,7 +497,7 @@ tokenize_attributes(B, S=#decoder{offset=O}, Acc) ->
         <<_:O/binary, C, _/binary>> when ?IS_WHITESPACE(C) ->
             tokenize_attributes(B, ?INC_CHAR(S, C), Acc);
         _ ->
-            {Attr, S1} = tokenize_literal(B, S),
+            {Attr, S1} = tokenize_literal(B, S, attribute),
             {Value, S2} = tokenize_attr_value(Attr, B, S1),
             tokenize_attributes(B, S2, [{Attr, Value} | Acc])
     end.
@@ -560,7 +560,7 @@ skip_whitespace(B, S=#decoder{offset=O}) ->
             S
     end.
 
-tokenize_literal(Bin, S=#decoder{offset=O}) ->
+tokenize_literal(Bin, S=#decoder{offset=O}, Type) ->
     case Bin of
         <<_:O/binary, C, _/binary>> when C =:= $>
                                     orelse C =:= $/
@@ -569,28 +569,42 @@ tokenize_literal(Bin, S=#decoder{offset=O}) ->
             %% 0 chars. http://github.com/mochi/mochiweb/pull/13
             {[C], ?INC_COL(S)};
         _ ->
-            tokenize_literal(Bin, S, <<>>)
+            tokenize_literal(Bin, S, Type, <<>>)
     end.
 
-tokenize_literal(Bin, S=#decoder{offset=O}, Acc) ->
+tokenize_literal(Bin, S=#decoder{offset=O}, Type, Acc) ->
     case Bin of
         <<_:O/binary, $&, _/binary>> ->
             {{data, Data, false}, S1} = tokenize_charref(Bin, ?INC_COL(S)),
-            tokenize_literal(Bin, S1, <<Acc/binary, Data/binary>>);
+            tokenize_literal(Bin, S1, Type, <<Acc/binary, Data/binary>>);
         <<_:O/binary, C, _/binary>> when not (?IS_WHITESPACE(C)
                                               orelse C =:= $>
                                               orelse C =:= $/
                                               orelse C =:= $=) ->
-            tokenize_literal(Bin, ?INC_COL(S), <<Acc/binary, C>>);
+            tokenize_literal(Bin, ?INC_COL(S), Type, <<Acc/binary, C>>);
         _ ->
-            LAcc = mochiweb_util:to_lower(Acc),
-            Acc1 = case is_html_literal(LAcc) of
-                true -> LAcc;
-                false -> Acc
-            end,
+            Acc1 = case Type of
+                tag ->
+                    tokenize_tag(Acc);
+                attribute ->
+                    tokenize_attribute_name(Acc)
+            end,  
             {Acc1, S}
     end.
 
+tokenize_tag(Tag) ->
+    LTag = mochiweb_util:to_lower(Tag),
+    case is_html_tag(LTag) of
+        true -> LTag;
+        false -> Tag 
+    end.
+    
+tokenize_attribute_name(Name) ->
+    LName = mochiweb_util:to_lower(Name),
+    case is_html_attr(LName) of
+        true -> LName;
+        false -> Name 
+    end.
 
 raw_qgt(Bin, S=#decoder{offset=O}) ->
     raw_qgt(Bin, S, O).
@@ -707,7 +721,7 @@ tokenize_word_or_literal(Bin, S=#decoder{offset=O}) ->
             tokenize_word(Bin, ?INC_COL(S), C);
         <<_:O/binary, C, _/binary>> when not ?IS_WHITESPACE(C) ->
             %% Sanity check for whitespace
-            tokenize_literal(Bin, S)
+            tokenize_literal(Bin, S, tag)
     end.
 
 tokenize_word(Bin, S, Quote) ->
@@ -805,11 +819,10 @@ tokenize_textarea(Bin, S=#decoder{offset=O}, Start) ->
             {{data, Raw, false}, S}
     end.
 
-% @doc Returns true when Lit is a html literal
-is_html_literal(Lit) ->
-    is_html_tag(Lit) orelse is_html_attr(Lit).
 
 % @doc Return true when Tag is a html tag.
+%
+
 % A
 is_html_tag(<<"a">>) -> true;
 is_html_tag(<<"abbr">>) -> true;
@@ -1355,6 +1368,16 @@ parse_test() ->
           [{<<"Player">>,[],[<<"Me">>]}]}]}]},
        parse(<<"<body Class=\"\" bgcolor=\"#Aa01fF\"><xml id=\"data\"><Score Property='test'><Player>Me</Player></Score></xml></BODY>">>)),
 
+    %% Case insensitive html tags and attributes mixed with case sensitive xml data islands.
+    %% Difference in lowercasing attribute names and tag names.
+    ?assertEqual({<<"body">>,
+      [{<<"id">>,<<"x">>},{<<"bgcolor">>,<<"#Aa01fF">>}],
+      [{<<"xml">>,
+        [{<<"id">>,<<"data">>}],
+        [{<<"Score">>,
+          [{<<"Property">>,<<"test">>}],
+          [{<<"Id">>,[],[<<"Me">>]}]}]}]},
+       parse(<<"<body Id=\"x\" bgcolor=\"#Aa01fF\"><xml id=\"data\"><Score Property='test'><Id>Me</Id></Score></xml></BODY>">>)),
 
     ok.
 
