@@ -48,11 +48,13 @@ start_link(Options) ->
     mochiweb_socket_server:start_link(parse_options(Options)).
 
 loop(Socket, Body) ->
-    ok = mochiweb_socket:setopts(Socket, [{packet, http}]),
+    mochiweb_socket:setopts(Socket, [{packet, http}]),
     request(Socket, Body).
 
 request(Socket, Body) ->
-    ok = mochiweb_socket:setopts(Socket, [{active, once}]),
+    %% Set the socket to active so we receive the tcp and ssl_closed
+    %% message when the client closes the connection.
+    mochiweb_socket:setopts(Socket, [{active, once}]),
     receive
         {Protocol, _, {http_request, Method, Path, Version}} when Protocol == http orelse Protocol == ssl ->
             ok = mochiweb_socket:setopts(Socket, [{packet, httph}]),
@@ -91,7 +93,9 @@ headers(Socket, Request, Headers, _Body, ?MAX_HEADERS) ->
     ok = mochiweb_socket:setopts(Socket, [{packet, raw}]),
     handle_invalid_request(Socket, Request, Headers);
 headers(Socket, Request, Headers, Body, HeaderCount) ->
-    ok = mochiweb_socket:setopts(Socket, [{active, once}]),
+    %% Set the socket to active so we receive the tcp and ssl_closed
+    %% message when the client closes the connection.
+    mochiweb_socket:setopts(Socket, [{active, once}]),
     receive
         {Protocol, _, http_eoh} when Protocol == http orelse Protocol == ssl ->
             Req = new_request(Socket, Request, Headers),
