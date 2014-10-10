@@ -8,7 +8,10 @@
 
 -include("internal.hrl").
 
--export([start_link/3, init/3]).
+-export([start_link/3]).
+
+% exported for looping with a fully qualified module name.
+-export([init/3, call_loop/2]).
 
 start_link(Server, Listen, Loop) ->
     proc_lib:spawn_link(?MODULE, init, [Server, Listen, Loop]).
@@ -18,19 +21,17 @@ init(Server, Listen, Loop) ->
     case catch mochiweb_socket:accept(Listen) of
         {ok, Socket} ->
             gen_server:cast(Server, {accepted, self(), timer:now_diff(os:timestamp(), T1)}),
-            call_loop(Loop, Socket);
+            ?MODULE:call_loop(Loop, Socket);
+        {error, timeout} ->
+            ?MODULE:init(Server, Listen, Loop);
+        {error, econnaborted} ->
+            ?MODULE:init(Server, Listen, Loop);
+        {error, {tls_alert, _}} ->
+            ?MODULE:init(Server, Listen, Loop);
         {error, closed} ->
             exit(normal);
-        {error, timeout} ->
-            init(Server, Listen, Loop);
-        {error, esslaccept} ->
-            exit(normal);
-        Other ->
-            error_logger:error_report(
-              [{application, mochiweb},
-               "Accept failed error",
-               lists:flatten(io_lib:format("~p", [Other]))]),
-            exit({error, accept_failed})
+        {error, Other} ->
+            exit({error, Other})
     end.
 
 call_loop({M, F}, Socket) ->
