@@ -56,6 +56,20 @@ new_request({Socket, {Method, '*'=Uri, Version}, Headers}) ->
                          Method,
                          Uri,
                          Version,
+                         mochiweb_headers:make(Headers));
+
+new_request({Socket, {Method, {scheme, Host, Port}, Version}, Headers}) ->
+    mochiweb_request:new(Socket,
+                         Method,
+                         Host ++ [$:|Port],
+                         Version,
+                         mochiweb_headers:make(Headers));
+
+new_request({Socket, {Method, Uri, Version}, Headers}) when is_list(Uri) ->
+    mochiweb_request:new(Socket,
+                         Method,
+                         Uri,
+                         Version,
                          mochiweb_headers:make(Headers)).
 
 %% @spec new_response({Request, integer(), Headers}) -> MochiWebResponse
