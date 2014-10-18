@@ -51,10 +51,10 @@ new_request({Socket, {Method, {absoluteURI, _Protocol, _Host, _Port, Uri},
                          mochiweb_headers:make(Headers));
 %% Request-URI is "*"
 %% From http://www.w3.org/Protocols/rfc2616/rfc2616-sec5.html#sec5.1.2
-new_request({Socket, {Method, '*'=Uri, Version}, Headers}) ->
+new_request({Socket, {Method, '*', Version}, Headers}) ->
     mochiweb_request:new(Socket,
                          Method,
-                         Uri,
+                         "*",
                          Version,
                          mochiweb_headers:make(Headers));
 
