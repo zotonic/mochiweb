@@ -73,9 +73,11 @@ request(Socket, Body) ->
             % R15B02 returns this then closes the socket, so close and exit
             mochiweb_socket:close(Socket),
             exit(normal);
+        {Protocol, _, {http_error, _}=Err} when Protocol =:= http orelse Protocol =:= ssl ->
+            info_report(Socket, ["Request parse error", Err]),
+            handle_invalid_request(Socket);
         Other when is_tuple(Other) andalso is_port(element(2, Other)) ->
-            error_logger:error_report([{application, mochiweb},
-                                       "Request failed", lists:flatten(io_lib:format("~p", [Other]))]),
+            error_report(Socket, ["Request failed", lists:flatten(io_lib:format("~p", [Other]))]),
             handle_invalid_request(Socket)
     after ?REQUEST_RECV_TIMEOUT ->
         mochiweb_socket:close(Socket),
@@ -89,7 +91,7 @@ reentry(Body) ->
 
 headers(Socket, Request, Headers, _Body, ?MAX_HEADERS) ->
     %% Too many headers sent, bad request.
-    error_logger:error_report([{application, mochiweb}, "Too many headers sent, bad request", Headers]),
+    error_logger:error_report(Socket, ["Too many headers sent, bad request", Headers]),
     ok = mochiweb_socket:setopts(Socket, [{packet, raw}]),
     handle_invalid_request(Socket, Request, Headers);
 headers(Socket, Request, Headers, Body, HeaderCount) ->
@@ -112,8 +114,7 @@ headers(Socket, Request, Headers, Body, HeaderCount) ->
             mochiweb_socket:close(Socket),
             exit(normal);
         Other when is_tuple(Other) andalso is_port(element(2, Other)) ->
-            error_logger:error_report([{application, mochiweb}, "Headers failed",
-                                       lists:flatten(io_lib:format("~p", [Other])), Headers]),
+            error_logger:error_report(Socket, [lists:flatten(io_lib:format("~p", [Other])), Headers]),
             handle_invalid_request(Socket, Request, Headers)
     after ?HEADERS_RECV_TIMEOUT ->
         mochiweb_socket:close(Socket),
@@ -193,6 +194,18 @@ range_skip_length(Spec, Size) ->
             {Start, Size - Start};
         {_OutOfRange, _End} ->
             invalid_range
+    end.
+
+info_report(Socket, Message) ->
+    error_logger:info_report([{application, mochiweb}, ip(Socket) | Message]).
+
+error_report(Socket, Message) ->
+    error_logger:error_report([{application, mochiweb}, ip(Socket) | Message]).
+
+ip(Socket) ->
+    case catch mochiweb_socket:peername(Socket) of
+        {ok, {Ip, _Port}} -> inet:ntoa(Ip);
+        _ -> unknown
     end.
 
 %%
