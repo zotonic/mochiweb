@@ -203,10 +203,20 @@ error_report(Socket, Message) ->
     error_logger:error_report([{application, mochiweb}, ip(Socket) | Message]).
 
 ip(Socket) ->
-    case catch mochiweb_socket:peername(Socket) of
-        {ok, {Ip, _Port}} -> inet:ntoa(Ip);
-        _ -> unknown
-    end.
+    IpAddr = case catch mochiweb_socket:peername(Socket) of
+        {ok, {Ip, _Port}} -> Ip;
+        _ -> undefined
+    end,
+    fmt_ip(IpAddr).
+
+fmt_ip(Tuple) when is_tuple(Tuple) ->
+    inet_parse:ntoa(Tuple);
+fmt_ip(undefined) ->
+    "0.0.0.0";
+fmt_ip(SomethingElse) ->
+    SomethingElse.
+
+
 
 %%
 %% Tests
