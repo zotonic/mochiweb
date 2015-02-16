@@ -309,6 +309,7 @@ with_socket_server(Transport, ServerFun, ClientFun) ->
         plain ->
             ServerOpts0;
         ssl ->
+            application:start(asn1), application:start(crypto), application:start(ssl),
             ServerOpts0 ++ [{ssl, true}, {ssl_opts, ssl_cert_opts()}]
     end,
     {ok, Server} = mochiweb_socket_server:start_link(ServerOpts),
