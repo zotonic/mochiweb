@@ -31,7 +31,7 @@
          acceptor_pool_size=16,
          ssl=false,
          ssl_opts=[{ssl_imp, new}],
-         acceptor_pool=sets:new(),
+         acceptor_pool=[],
          profile_fun=undefined}).
 
 -define(is_old_state(State), not is_record(State, mochiweb_socket_server)).
@@ -194,7 +194,7 @@ new_acceptor_pool(Listen,
                                                 loop=Loop}) ->
     F = fun (_, S) ->
                 Pid = mochiweb_acceptor:start_link(self(), Listen, Loop),
-                sets:add_element(Pid, S)
+                [Pid | S]
         end,
     Pool1 = lists:foldl(F, Pool, lists:seq(1, Size)),
     State#mochiweb_socket_server{acceptor_pool=Pool1}.
@@ -248,16 +248,14 @@ handle_call(_Message, _From, State) ->
 
 handle_cast(Req, State) when ?is_old_state(State) ->
     handle_cast(Req, upgrade_state(State));
-handle_cast({accepted, Pid, Timing},
-            State=#mochiweb_socket_server{active_sockets=ActiveSockets}) ->
-    State1 = State#mochiweb_socket_server{active_sockets=1 + ActiveSockets},
+handle_cast({accepted, Timing}, State) ->
     case State#mochiweb_socket_server.profile_fun of
         undefined ->
             undefined;
         F when is_function(F) ->
-            catch F([{timing, Timing} | state_to_proplist(State1)])
+            catch F([{timing, Timing} | state_to_proplist(State)])
     end,
-    {noreply, recycle_acceptor(Pid, State1)};
+    {noreply, add_acceptor(State)};
 handle_cast({set, profile_fun, ProfileFun}, State) ->
     State1 = case ProfileFun of
                  ProfileFun when is_function(ProfileFun); ProfileFun =:= undefined ->
@@ -278,35 +276,31 @@ terminate(_Reason, #mochiweb_socket_server{listen=Listen}) ->
 code_change(_OldVsn, State, _Extra) ->
     State.
 
-recycle_acceptor(Pid, State=#mochiweb_socket_server{
-                        acceptor_pool=Pool,
-                        listen=Listen,
-                        loop=Loop,
-                        active_sockets=ActiveSockets}) ->
-    case sets:is_element(Pid, Pool) of
-        true ->
-            Acceptor = mochiweb_acceptor:start_link(self(), Listen, Loop),
-            Pool1 = sets:add_element(Acceptor, sets:del_element(Pid, Pool)),
-            State#mochiweb_socket_server{acceptor_pool=Pool1};
-        false ->
-            State#mochiweb_socket_server{active_sockets=ActiveSockets - 1}
-    end.
+add_acceptor(State) ->
+    Acceptor = mochiweb_acceptor:start_link(self(), 
+        State#mochiweb_socket_server.listen, State#mochiweb_socket_server.loop),
+    State#mochiweb_socket_server{
+        acceptor_pool=[Acceptor|State#mochiweb_socket_server.acceptor_pool],
+        active_sockets=State#mochiweb_socket_server.active_sockets + 1}.
+
+remove_acceptor(Pid, State) ->
+    State#mochiweb_socket_server{
+        acceptor_pool = lists:delete(Pid, State#mochiweb_socket_server.acceptor_pool),
+            active_sockets = State#mochiweb_socket_server.active_sockets - 1}.
+
 
 handle_info(Msg, State) when ?is_old_state(State) ->
     handle_info(Msg, upgrade_state(State));
 handle_info({'EXIT', Pid, normal}, State) ->
-    {noreply, recycle_acceptor(Pid, State)};
+    {noreply, remove_acceptor(Pid, State)};
 handle_info({'EXIT', Pid, {error, emfile}}, State) ->
     error_logger:error_msg("No more file descriptors, reducing request rate.~n"),
     timer:sleep(100),
-    {noreply, recycle_acceptor(Pid, State)};
-handle_info({'EXIT', Pid, Reason}, State=#mochiweb_socket_server{acceptor_pool=Pool}) ->
-    ErrorType = case sets:is_element(Pid, Pool) of
-        true -> acceptor_error;
-        false -> request_error
-    end,
-    error_logger:error_report({?MODULE, ?LINE, {ErrorType, Reason}}),
-    {noreply, recycle_acceptor(Pid, State)};
+    {noreply, remove_acceptor(Pid, State)};
+handle_info({'EXIT', Pid, Reason}, State) ->
+    error_logger:error_msg("Mochiweb request (pid ~p) unexpectedly "
+        "crashed:~n~p~n", [Pid, Reason]),
+    {noreply, remove_acceptor(Pid, State)};
 
 % this is what release_handler needs to get a list of modules,
 % since our supervisor modules list is set to 'dynamic'
