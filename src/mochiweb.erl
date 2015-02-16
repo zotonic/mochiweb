@@ -36,41 +36,21 @@ all_loaded(Base) ->
 %% @spec new_request({Socket, Request, Headers}) -> MochiWebRequest
 %% @doc Return a mochiweb_request data structure.
 new_request({Socket, {Method, {abs_path, Uri}, Version}, Headers}) ->
-    mochiweb_request:new(Socket,
-                         Method,
-                         Uri,
-                         Version,
-                         mochiweb_headers:make(Headers));
+    mochiweb_request:new(Socket, Method, Uri, Version, Headers);
 % this case probably doesn't "exist".
 new_request({Socket, {Method, {absoluteURI, _Protocol, _Host, _Port, Uri},
                       Version}, Headers}) ->
-    mochiweb_request:new(Socket,
-                         Method,
-                         Uri,
-                         Version,
-                         mochiweb_headers:make(Headers));
+    mochiweb_request:new(Socket, Method, Uri, Version, Headers);
 %% Request-URI is "*"
 %% From http://www.w3.org/Protocols/rfc2616/rfc2616-sec5.html#sec5.1.2
 new_request({Socket, {Method, '*', Version}, Headers}) ->
-    mochiweb_request:new(Socket,
-                         Method,
-                         "*",
-                         Version,
-                         mochiweb_headers:make(Headers));
+    mochiweb_request:new(Socket, Method, "*", Version, Headers);
 
 new_request({Socket, {Method, {scheme, Host, Port}, Version}, Headers}) ->
-    mochiweb_request:new(Socket,
-                         Method,
-                         Host ++ [$:|Port],
-                         Version,
-                         mochiweb_headers:make(Headers));
+    mochiweb_request:new(Socket, Method, Host ++ [$:|Port], Version, Headers);
 
 new_request({Socket, {Method, Uri, Version}, Headers}) when is_list(Uri) ->
-    mochiweb_request:new(Socket,
-                         Method,
-                         Uri,
-                         Version,
-                         mochiweb_headers:make(Headers)).
+    mochiweb_request:new(Socket, Method, Uri, Version, Headers).
 
 %% @spec new_response({Request, integer(), Headers}) -> MochiWebResponse
 %% @doc Return a mochiweb_response data structure.

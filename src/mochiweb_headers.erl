@@ -92,6 +92,12 @@ to_list(T) ->
 %% @spec get_value(key(), headers()) -> string() | undefined
 %% @doc Return the value of the given header using a case insensitive search.
 %%      undefined will be returned for keys that are not present.
+get_value(K, L) when is_list(L) ->
+    case proplists:get_all_values(K, L) of
+        [] -> undefined;
+        [V] -> V;
+        L -> mochiweb_util:join(L, ", ")
+    end;
 get_value(K, T) ->
     case lookup(K, T) of
         {value, {_, V}} ->

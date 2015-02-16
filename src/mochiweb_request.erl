@@ -92,14 +92,14 @@ get(headers, {?MODULE, [_Socket, _Method, _RawPath, _Version, Headers]}) ->
 get(peer, {?MODULE, [Socket, _Method, _RawPath, _Version, _Headers]}=THIS) ->
     case mochiweb_socket:peername(Socket) of
         {ok, {Addr={10, _, _, _}, _Port}} ->
-            case get_header_value("x-forwarded-for", THIS) of
+            case get_header_value('X-Forwarded-For', THIS) of
                 undefined ->
                     inet_parse:ntoa(Addr);
                 Hosts ->
                     string:strip(lists:last(string:tokens(Hosts, ",")))
             end;
         {ok, {{127, 0, 0, 1}, _Port}} ->
-            case get_header_value("x-forwarded-for", THIS) of
+            case get_header_value('X-Forwarded-For', THIS) of
                 undefined ->
                     "127.0.0.1";
                 Hosts ->
@@ -130,7 +130,7 @@ get(body_length, {?MODULE, [_Socket, _Method, _RawPath, _Version, _Headers]}=THI
             Cached
     end;
 get(range, {?MODULE, [_Socket, _Method, _RawPath, _Version, _Headers]}=THIS) ->
-    case get_header_value(range, THIS) of
+    case get_header_value('Range', THIS) of
         undefined ->
             undefined;
         RawRange ->
@@ -152,7 +152,7 @@ send(Data, {?MODULE, [Socket, _Method, _RawPath, _Version, _Headers]}) ->
     case mochiweb_socket:send(Socket, Data) of
         ok ->
             ok;
-        _ ->
+        _E ->
             exit(normal)
     end.
 
@@ -177,9 +177,9 @@ recv(Length, Timeout, {?MODULE, [Socket, _Method, _RawPath, _Version, _Headers]}
 %% @spec body_length(request()) -> undefined | chunked | unknown_transfer_encoding | integer()
 %% @doc  Infer body length from transfer-encoding and content-length headers.
 body_length({?MODULE, [_Socket, _Method, _RawPath, _Version, _Headers]}=THIS) ->
-    case get_header_value("transfer-encoding", THIS) of
+    case get_header_value('Transfer-Encoding', THIS) of
         undefined ->
-            case get_combined_header_value("content-length", THIS) of
+            case get_combined_header_value('Content-Length', THIS) of
                 undefined ->
                     undefined;
                 Length ->
@@ -226,7 +226,7 @@ stream_body(MaxChunkSize, ChunkFun, FunState, {?MODULE,[_Socket,_Method,_RawPath
 
 stream_body(MaxChunkSize, ChunkFun, FunState, MaxBodyLength,
             {?MODULE, [_Socket, _Method, _RawPath, _Version, _Headers]}=THIS) ->
-    Expect = case get_header_value("expect", THIS) of
+    Expect = case get_header_value("Expect", THIS) of
                  undefined ->
                      undefined;
                  Value when is_list(Value) ->
@@ -400,16 +400,16 @@ should_close({?MODULE, [_Socket, _Method, _RawPath, Version, _Headers]}=THIS) ->
     DidNotRecv = erlang:get(?SAVE_RECV) =:= undefined,
     ForceClose orelse Version < {1, 0}
         %% Connection: close
-        orelse is_close(get_header_value("connection", THIS))
+        orelse is_close(get_header_value('Connection', THIS))
         %% HTTP 1.0 requires Connection: Keep-Alive
         orelse (Version =:= {1, 0}
-                andalso get_header_value("connection", THIS) =/= "Keep-Alive")
+                andalso get_header_value('Connection', THIS) =/= "Keep-Alive")
         %% unread data left on the socket, can't safely continue
         orelse (DidNotRecv
-                andalso get_combined_header_value("content-length", THIS) =/= undefined
-                andalso list_to_integer(get_combined_header_value("content-length", THIS)) > 0)
+                andalso get_combined_header_value('Content-Length', THIS) =/= undefined
+                andalso list_to_integer(get_combined_header_value('Content-Length', THIS)) > 0)
         orelse (DidNotRecv
-                andalso get_header_value("transfer-encoding", THIS) =:= "chunked").
+                andalso get_header_value('Transfer-Encoding', THIS) =:= "chunked").
 
 is_close("close") ->
     true;
@@ -452,7 +452,7 @@ get_cookie_value(Key, {?MODULE, [_Socket, _Method, _RawPath, _Version, _Headers]
 parse_cookie({?MODULE, [_Socket, _Method, _RawPath, _Version, _Headers]}=THIS) ->
     case erlang:get(?SAVE_COOKIE) of
         undefined ->
-            Cookies = case get_header_value("cookie", THIS) of
+            Cookies = case get_header_value('Cookie', THIS) of
                           undefined ->
                               [];
                           Value ->
@@ -474,7 +474,7 @@ parse_post({?MODULE, [_Socket, _Method, _RawPath, _Version, _Headers]}=THIS) ->
                          undefined ->
                              [];
                          Binary ->
-                             case get_primary_header_value("content-type",THIS) of
+                             case get_primary_header_value('Content-Type',THIS) of
                                  "application/x-www-form-urlencoded" ++ _ ->
                                      mochiweb_util:parse_qs(Binary);
                                  _ ->
@@ -606,7 +606,7 @@ maybe_redirect(RelPath, FullPath, ExtraHeaders,
         "/" ->
             maybe_serve_file(directory_index(FullPath), ExtraHeaders, THIS);
         _   ->
-            Host = mochiweb_headers:get_value("host", Headers),
+            Host = mochiweb_headers:get_value('Host', Headers),
             Location = "http://" ++ Host  ++ "/" ++ RelPath ++ "/",
             LocationBin = list_to_binary(Location),
             MoreHeaders = [{"Location", Location},
@@ -626,7 +626,7 @@ maybe_serve_file(File, ExtraHeaders, {?MODULE, [_Socket, _Method, _RawPath, _Ver
     case file:read_file_info(File) of
         {ok, FileInfo} ->
             LastModified = httpd_util:rfc1123_date(FileInfo#file_info.mtime),
-            case get_header_value("if-modified-since", THIS) of
+            case get_header_value('If-Modified-Since', THIS) of
                 LastModified ->
                     respond({304, ExtraHeaders, ""}, THIS);
                 _ ->
@@ -717,7 +717,7 @@ range_parts(Body0, Ranges) ->
 %%            ["deflate", "gzip", "identity"]
 %%
 accepted_encodings(SupportedEncodings, {?MODULE, [_Socket, _Method, _RawPath, _Version, _Headers]}=THIS) ->
-    AcceptEncodingHeader = case get_header_value("Accept-Encoding", THIS) of
+    AcceptEncodingHeader = case get_header_value('Accept-Encoding', THIS) of
         undefined ->
             "";
         Value ->
@@ -844,7 +844,7 @@ accepted_content_types(Types1, {?MODULE, [_Socket, _Method, _RawPath, _Version, 
     end.
 
 accept_header({?MODULE, [_Socket, _Method, _RawPath, _Version, _Headers]}=THIS) ->
-    case get_header_value("Accept", THIS) of
+    case get_header_value('Accept', THIS) of
         undefined ->
             "*/*";
         Value ->
