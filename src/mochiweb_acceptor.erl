@@ -39,14 +39,18 @@ handshake(Loop, Socket) ->
         {ok, Socket} ->
             ?MODULE:call_loop(Loop, Socket);
         {error, timeout} ->
+            mochiweb_socket:close(Socket),
             exit(normal);
         {error, econnaborted} ->
+            mochiweb_socket:close(Socket),
             exit(normal);
         {error, {tls_alert, _}} ->
+            mochiweb_socket:close(Socket),
             exit(normal);
         {error, closed} ->
             exit(normal);
         {error, Other} ->
+            mochiweb_socket:close(Socket),
             exit({error, Other})
     end.
 
