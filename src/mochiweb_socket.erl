@@ -4,7 +4,7 @@
 
 -module(mochiweb_socket).
 
--export([listen/4, accept/1, recv/3, send/2, close/1, port/1, peername/1,
+-export([listen/4, accept/1, transport_accept/1, handshake/1, recv/3, send/2, close/1, port/1, peername/1,
          setopts/2, type/1]).
 
 -define(ACCEPT_TIMEOUT, 2000).
@@ -86,6 +86,26 @@ accept({ssl, ListenSocket}) ->
     end;
 accept(ListenSocket) ->
     gen_tcp:accept(ListenSocket, ?ACCEPT_TIMEOUT).
+
+transport_accept({ssl, ListenSocket}) ->
+    case ssl:transport_accept(ListenSocket, ?SSL_TIMEOUT) of
+        {ok, Socket} ->
+            {ok, {ssl, Socket}};
+        {error, _} = Err ->
+            Err
+    end; 
+transport_accept(ListenSocket) ->
+    gen_tcp:accept(ListenSocket, ?ACCEPT_TIMEOUT).
+
+handshake({ssl, Socket}) ->
+    case ssl:ssl_accept(Socket, ?SSL_HANDSHAKE_TIMEOUT) of
+        ok ->
+            {ok, {ssl, Socket}};
+        {error, _} = Err ->
+            Err
+    end;
+handshake(Socket) ->
+    {ok, Socket}.
 
 recv({ssl, Socket}, Length, Timeout) ->
     ssl:recv(Socket, Length, Timeout);
