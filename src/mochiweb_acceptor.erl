@@ -11,7 +11,7 @@
 -export([start_link/3]).
 
 % exported for looping with a fully qualified module name.
--export([init/3, handshake/2, call_loop/2]).
+-export([init/3, call_loop/2]).
 
 start_link(Server, Listen, Loop) ->
     proc_lib:spawn_link(?MODULE, init, [Server, Listen, Loop]).
@@ -20,37 +20,20 @@ init(Server, Listen, Loop) ->
     T1 = os:timestamp(),
     case catch mochiweb_socket:transport_accept(Listen) of
         {ok, Socket} ->
+            %% Accept this connection, and let the socket server start a new acceptor
             gen_server:cast(Server, {accepted, self(), timer:now_diff(os:timestamp(), T1)}),
-            ?MODULE:handshake(Loop, Socket);
-        {error, timeout} ->
-            ?MODULE:init(Server, Listen, Loop);
-        {error, econnaborted} ->
-            ?MODULE:init(Server, Listen, Loop);
-        {error, {tls_alert, _}} ->
-            ?MODULE:init(Server, Listen, Loop);
-        {error, closed} ->
-            exit(normal);
-        {error, Other} ->
-            exit({error, Other})
-    end.
 
-handshake(Loop, Socket) ->
-    case catch mochiweb_socket:handshake(Socket) of
-        {ok, Socket} ->
+            %% Perform a ssl handshake if needed.
+            ok = mochiweb_socket:handshake(Socket),
+
             ?MODULE:call_loop(Loop, Socket);
         {error, timeout} ->
-            mochiweb_socket:close(Socket),
-            exit(normal);
+            ?MODULE:init(Server, Listen, Loop);
         {error, econnaborted} ->
-            mochiweb_socket:close(Socket),
-            exit(normal);
-        {error, {tls_alert, _}} ->
-            mochiweb_socket:close(Socket),
-            exit(normal);
+            ?MODULE:init(Server, Listen, Loop);
         {error, closed} ->
             exit(normal);
         {error, Other} ->
-            mochiweb_socket:close(Socket),
             exit({error, Other})
     end.
 

@@ -97,15 +97,25 @@ transport_accept({ssl, ListenSocket}) ->
 transport_accept(ListenSocket) ->
     gen_tcp:accept(ListenSocket, ?ACCEPT_TIMEOUT).
 
-handshake({ssl, Socket}) ->
+handshake({ssl, Socket}=S) ->
     case ssl:ssl_accept(Socket, ?SSL_HANDSHAKE_TIMEOUT) of
-        ok ->
-            {ok, {ssl, Socket}};
-        {error, _} = Err ->
-            Err
+        ok -> 
+            ok;
+
+        %% Garbage was most likely sent to the socket, don't error out.
+        {error, {tls_alert, _}} ->
+            mochiweb_socket:close(S),
+            exit(normal);
+        %% Socket most likely stopped responding, don't error out.
+        {error, Reason} when Reason =:= timeout orelse Reason =:= closed ->
+            mochiweb_socket:close(S),
+            exit(normal);
+        {error, Reason} ->
+            mochiweb_socket:close(S),
+            exit({error, Reason})
     end;
-handshake(Socket) ->
-    {ok, Socket}.
+handshake(_Socket) ->
+    ok.
 
 recv({ssl, Socket}, Length, Timeout) ->
     ssl:recv(Socket, Length, Timeout);
