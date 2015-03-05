@@ -297,9 +297,8 @@ handle_info(Msg, State) when ?is_old_state(State) ->
 handle_info({'EXIT', Pid, normal}, State) ->
     {noreply, recycle_acceptor(Pid, State)};
 handle_info({'EXIT', Pid, {error, emfile}}, State) ->
-    error_logger:error_msg("No more file descriptors, reducing request rate.~n"),
-    timer:sleep(100),
-    {noreply, recycle_acceptor(Pid, State)};
+    error_logger:error_msg("No more file descriptors, shutting down.~n"),
+    {stop, emfile, State};
 handle_info({'EXIT', Pid, Reason}, State=#mochiweb_socket_server{acceptor_pool=Pool}) ->
     ErrorType = case sets:is_element(Pid, Pool) of
         true -> acceptor_error;
