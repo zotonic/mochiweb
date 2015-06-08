@@ -45,6 +45,7 @@ filter_broken_cipher_suites(Ciphers) ->
 filter_unsecure_cipher_suites(Ciphers) ->
     lists:filter(fun
                     ({_,des_cbc,_}) -> false;
+                    ({_,rc4_128,_}) -> false;
                     ({_,_,md5}) -> false;
                     (_) -> true
                  end,
