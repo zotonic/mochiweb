@@ -178,7 +178,7 @@ init(State=#mochiweb_socket_server{ip=Ip, port=Port, backlog=Backlog, nodelay=No
             [inet | BaseOpts];
         any6 ->
             case ipv6_supported() of % IPv6 if supported
-                true -> [inet6, {raw, ?IPPROTO_IPV6, ?IPV6_V6ONLY, <<1:32/native>>} | BaseOpts];
+                true -> [inet6, {ipv6_only, true} | BaseOpts];
                 _ -> BaseOpts
             end;
         {_, _, _, _} -> % IPv4
@@ -296,7 +296,7 @@ handle_info(Msg, State) when ?is_old_state(State) ->
     handle_info(Msg, upgrade_state(State));
 handle_info({'EXIT', Pid, normal}, State) ->
     {noreply, recycle_acceptor(Pid, State)};
-handle_info({'EXIT', Pid, {error, emfile}}, State) ->
+handle_info({'EXIT', _Pid, {error, emfile}}, State) ->
     error_logger:error_msg("No more file descriptors, shutting down.~n"),
     {stop, emfile, State};
 handle_info({'EXIT', Pid, Reason}, State=#mochiweb_socket_server{acceptor_pool=Pool}) ->
