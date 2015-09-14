@@ -136,7 +136,7 @@ handle_invalid_request(Socket) ->
 -spec handle_invalid_request(term(), term(), term()) -> no_return().
 handle_invalid_request(Socket, Request, RevHeaders) ->
     Req = new_request(Socket, Request, RevHeaders),
-    Req:respond({400, [], []}),
+    catch Req:respond({400, [], []}),
     mochiweb_socket:close(Socket),
     exit(normal).
 
