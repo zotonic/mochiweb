@@ -680,7 +680,7 @@ tokenize_charref(Bin, S=#decoder{offset=O}, Start) ->
                            <<_:Start1/binary, R:Len1/binary, _/binary>> = Bin,
                            R;
                        Unichar ->
-                           mochiutf8:codepoint_to_bytes(Unichar)
+                            codepoint_to_bytes(Unichar)
                    end,
             {{data, Data, false}, S};
         <<_:O/binary, $;, _/binary>> ->
@@ -689,15 +689,29 @@ tokenize_charref(Bin, S=#decoder{offset=O}, Start) ->
             Data = case mochiweb_charref:charref(Raw) of
                        undefined ->
                            throw(invalid_charref);
-                       Unichar when is_integer(Unichar) ->
-                           mochiutf8:codepoint_to_bytes(Unichar);
-                       Unichars when is_list(Unichars) ->
-                           unicode:characters_to_binary(Unichars)
+                       Unichar ->
+                           codepoint_to_bytes(Unichar)
                    end,
             {{data, Data, false}, ?INC_COL(S)};
         _ ->
             tokenize_charref(Bin, ?INC_COL(S), Start)
     end.
+
+codepoint_to_bytes(Unichar) when is_integer(Unichar) ->
+    try
+        mochiutf8:codepoint_to_bytes(Unichar)
+    catch
+        error:function_clause ->
+            throw(invalid_charref)
+    end;
+codepoint_to_bytes(Unichars) when is_list(Unichars) ->
+    case unicode:characters_to_binary(Unichars) of
+        B when is_binary(B) ->
+            B;
+        {error, _, _} ->
+            throw(invalid_charref)
+    end.
+
 
 tokenize_doctype(Bin, S) ->
     tokenize_doctype(Bin, S, []).
@@ -1760,6 +1774,12 @@ parse_charref_garbage_in_garbage_out_test() ->
        {<<"div">>, [], [<<"&amp. test">>]},
        mochiweb_html:parse(D1)),
     
+    ok.
+
+parse_invalid_charref_test() ->
+    D1 = <<"<i>&#55357;</i>">>,
+    ?assertEqual({<<"i">>,[],[<<"&#55357;">>]}, 
+                 mochiweb_html:parse(D1)),
     ok.
 
 parse_amp_test_() ->
