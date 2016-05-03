@@ -28,7 +28,7 @@ listen(Ssl, Port, Opts, SslOpts) ->
     end.
 
 add_unbroken_ciphers_default(Opts) ->
-    Default = filter_unsecure_cipher_suites(ssl:cipher_suites()),
+    Default = filter_unsecure_cipher_suites(default_ciphers()),
     Ciphers = filter_broken_cipher_suites(proplists:get_value(ciphers, Opts, Default)),
     [{ciphers, Ciphers} | proplists:delete(ciphers, Opts)].
 
@@ -43,13 +43,22 @@ filter_broken_cipher_suites(Ciphers) ->
     end.
 
 filter_unsecure_cipher_suites(Ciphers) ->
-    lists:filter(fun
-                    ({_,des_cbc,_}) -> false;
-                    ({_,rc4_128,_}) -> false;
-                    ({_,_,md5}) -> false;
-                    (_) -> true
-                 end,
-                 Ciphers).
+    lists:filter(fun is_secure/1, Ciphers).
+
+% Return true if the cipher spec is secure.
+is_secure({_KeyExchange, Cipher, MacHash}) ->
+    is_secure_cipher(Cipher) andalso is_secure_mac(MacHash);
+is_secure({_KeyExchange, Cipher, MacHash, _PrfHash}) ->
+    is_secure_cipher(Cipher) andalso is_secure_mac(MacHash).
+
+% Return true if the cipher algorithm is secure.
+is_secure_cipher(des_cbc) -> false;
+is_secure_cipher(rc4_128) -> false;
+is_secure_cipher(_) -> true.
+
+% Return true the mac algorithm is secure.
+is_secure_mac(md5) -> false;
+is_secure_mac(_) -> true.
 
 add_safe_protocol_versions(Opts) ->
     case proplists:is_defined(versions, Opts) of
@@ -67,6 +76,17 @@ filter_unsafe_protcol_versions(Versions) ->
                  end,
                  Versions).
 
+% Get a list of default ciphers. 
+%
+% Note: ssl:cipher_suites/0 does not return a usable set of ciphers. It returns
+% only ciphers usable by the highest protocol version. The problem is that it 
+% doesn't return default_prf as prf algorithm, but a fixed one usable by tls 1.2
+% only.
+default_ciphers() -> 
+    HighestProtocolVersion = tls_record:highest_protocol_version([]),
+    AllSuites = ssl_cipher:suites(HighestProtocolVersion),
+    AvailableSuites = ssl_cipher:filter_suites(AllSuites),
+    [ssl_cipher:suite_definition(S) || S <- AvailableSuites].
 
 accept({ssl, ListenSocket}) ->
     % There's a bug in ssl:transport_accept/2 at the moment, which is the
@@ -158,3 +178,16 @@ type({ssl, _}) ->
 type(_) ->
     plain.
 
+%%
+%% Tests
+%%
+-ifdef(TEST).
+-include_lib("eunit/include/eunit.hrl").
+
+default_cipher_test() ->
+    %% Make sure there are default ciphers.
+    ?assert(length(default_ciphers()) > 0),
+    ok.
+
+
+-endif.
