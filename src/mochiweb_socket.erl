@@ -35,17 +35,26 @@ add_unbroken_ciphers_default(Opts) ->
 filter_broken_cipher_suites(Ciphers) ->
 	case proplists:get_value(ssl_app, ssl:versions()) of
 		"5.3" ++ _ ->
-            lists:filter(fun(Suite) ->
-                                 string:left(atom_to_list(element(1, Suite)), 4) =/= "ecdh"
-                         end, Ciphers);
+            lists:filter(fun is_unbroken_cipher/1, Ciphers);
         _ ->
             Ciphers
     end.
+
+is_unbroken_cipher(Suite) when is_binary(Suite) ->
+    is_unbroken_cipher(ssl_cipher:suite_definition(Suite));
+is_unbroken_cipher(Suite) ->
+    case atom_to_list(element(1, Suite)) of
+        "ecdh"++_ -> false;
+        _ -> true
+    end.
+
 
 filter_unsecure_cipher_suites(Ciphers) ->
     lists:filter(fun is_secure/1, Ciphers).
 
 % Return true if the cipher spec is secure.
+is_secure(Suite) when is_binary(Suite) ->
+    is_secure(ssl_cipher:suite_definition(Suite));
 is_secure({_KeyExchange, Cipher, MacHash}) ->
     is_secure_cipher(Cipher) andalso is_secure_mac(MacHash);
 is_secure({_KeyExchange, Cipher, MacHash, _PrfHash}) ->
@@ -56,7 +65,7 @@ is_secure_cipher(des_cbc) -> false;
 is_secure_cipher(rc4_128) -> false;
 is_secure_cipher(_) -> true.
 
-% Return true the mac algorithm is secure.
+% Return true if the mac algorithm is secure.
 is_secure_mac(md5) -> false;
 is_secure_mac(_) -> true.
 
@@ -85,8 +94,7 @@ filter_unsafe_protcol_versions(Versions) ->
 default_ciphers() -> 
     HighestProtocolVersion = tls_record:highest_protocol_version([]),
     AllSuites = ssl_cipher:suites(HighestProtocolVersion),
-    AvailableSuites = ssl_cipher:filter_suites(AllSuites),
-    [ssl_cipher:suite_definition(S) || S <- AvailableSuites].
+    ssl_cipher:filter_suites(AllSuites).
 
 accept({ssl, ListenSocket}) ->
     % There's a bug in ssl:transport_accept/2 at the moment, which is the
