@@ -397,7 +397,7 @@ norm(Tag) ->
     end.
 
 stack(T1={TN, _, _}, Stack=[{TN, _, _} | _Rest])
-  when TN =:= <<"li">> orelse TN =:= <<"option">> ->
+  when TN =:= <<"li">> orelse TN =:= <<"option">> orelse TN =:= <<"tbody">> ->
     [T1 | destack(TN, Stack)];
 stack(T1={TN0, _, _}, Stack=[{TN1, _, _} | _Rest])
   when (TN0 =:= <<"dd">> orelse TN0 =:= <<"dt">>) andalso
@@ -1820,5 +1820,14 @@ parse_unescaped_lt_test() ->
         {<<"div">>, [], [<<" << ">>, {<<"a">>, [{<<"href">>, <<"/">>}], 
                                       [<<"Back">>]}]},
     mochiweb_html:parse(D2)).
+
+parse_unclosed_tbody_test() ->
+    D1 = <<"<table><tbody><tr><td>1</td><td>2</td></tr><tbody><tr><td>a</td></tr></tbody></table>">>,
+    %% Browsers parse this as two separate tbody's and not a nested one. This should 
+    %% be handled in the same way as li's and options are handled.
+    ?assertMatch({<<"table">>, [], [
+        {<<"tbody">>, [], _},
+        {<<"tbody">>, [], _}
+    ]}, mochiweb_html:parse(D1)).
 
 -endif.
