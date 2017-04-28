@@ -397,8 +397,26 @@ norm(Tag) ->
     end.
 
 stack(T1={TN, _, _}, Stack=[{TN, _, _} | _Rest])
-  when TN =:= <<"li">> orelse TN =:= <<"option">> orelse TN =:= <<"tbody">> ->
+  when TN =:= <<"li">> orelse TN =:= <<"option">> ->
     [T1 | destack(TN, Stack)];
+stack(T1={TN, _, _}, Stack) when TN =:= <<"td">> orelse TN =:= <<"th">> ->
+    case find_in_stack([<<"td">>, <<"th">>], <<"table">>, Stack) of
+        none -> Stack;
+        undefined -> [T1 | Stack];
+        Tag -> [T1 | destack(Tag, Stack)]
+    end;
+stack(T1={TN, _, _}, Stack) when TN =:= <<"tr">> ->
+    case find_in_stack([<<"tr">>], <<"table">>, Stack) of
+        none -> Stack;
+        undefined -> [T1 | Stack];
+        Tag -> [T1 | destack(Tag, Stack)]
+    end;
+stack(T1={TN, _, _}, Stack) when TN =:= <<"tbody">> orelse TN =:= <<"thead">> orelse TN =:= <<"tfoot">> orelse TN =:= <<"colgroup">> ->
+    case find_in_stack([<<"tbody">>, <<"thead">>, <<"tfoot">>, <<"colgroup">>], <<"table">>, Stack) of
+        none -> Stack;
+        undefined -> [T1 | destack(<<"tr">>, Stack)];
+        Tag -> [T1 | destack(Tag, Stack)]
+    end;
 stack(T1={TN0, _, _}, Stack=[{TN1, _, _} | _Rest])
   when (TN0 =:= <<"dd">> orelse TN0 =:= <<"dt">>) andalso
        (TN1 =:= <<"dd">> orelse TN1 =:= <<"dt">>) ->
@@ -406,6 +424,18 @@ stack(T1={TN0, _, _}, Stack=[{TN1, _, _} | _Rest])
 stack(T1, Stack) ->
     [T1 | Stack].
 
+find_in_stack(_CanClose, _Until, []) -> 
+    none;
+find_in_stack(_CanClose, Until, [{Until, _,_}|_Rest]) -> 
+    undefined;
+find_in_stack(CanClose, Until, [{TN, _,_}|Rest]) ->
+    case lists:member(TN, CanClose) of
+        false -> find_in_stack(CanClose, Until, Rest);
+        true -> TN
+    end;
+find_in_stack(CanClose, Until, [_|Rest]) ->
+    find_in_stack(CanClose, Until, Rest).
+    
 append_stack_child(StartTag, [{Name, Attrs, Acc} | Stack]) ->
     [{Name, Attrs, [StartTag | Acc]} | Stack].
 
@@ -1829,5 +1859,74 @@ parse_unclosed_tbody_test() ->
         {<<"tbody">>, [], _},
         {<<"tbody">>, [], _}
     ]}, mochiweb_html:parse(D1)).
+
+parse_table_with_omitted_tr_and_td_close_test() ->
+    D1 = "<table><tr><td>1<td>2<tr><td>3<td>4</table",
+    ?assertEqual({<<"table">>, [], [
+        {<<"tr">>, [], [{<<"td">>, [], [<<"1">>]}, {<<"td">>, [], [<<"2">>]}]},
+        {<<"tr">>, [], [{<<"td">>,[], [<<"3">>]}, {<<"td">>, [], [<<"4">>]}]} 
+    ]}, mochiweb_html:parse(D1)),
+    ok.
+
+parse_table_with_omitted_close_tags_test() ->
+    %% Close tags inside tables are optional.
+    D1 = "<table>"
+        "<thead><tr><td>1<td>2"
+        "<tfoot><tr><td>1<td>2"
+        "<tbody><tr><td>1<td>2<tr><td>2<td>3"
+        "<tbody><tr><td>1<td>2<td>3<tr><td>4<td>5<td>6"
+    "</table",
+
+    ?assertEqual({<<"table">>,[],
+         [{<<"thead">>,[],
+           [{<<"tr">>,[],[{<<"td">>,[],[<<"1">>]},{<<"td">>,[],[<<"2">>]}]}]},
+          {<<"tfoot">>,[],
+           [{<<"tr">>,[],[{<<"td">>,[],[<<"1">>]},{<<"td">>,[],[<<"2">>]}]}]},
+          {<<"tbody">>,[],
+           [{<<"tr">>,[], [{<<"td">>,[],[<<"1">>]}, {<<"td">>,[], [<<"2">>]}]},
+            {<<"tr">>,[], [{<<"td">>,[],[<<"2">>]},{<<"td">>,[],[<<"3">>]}]}]},
+          {<<"tbody">>,[],
+           [{<<"tr">>,[], [{<<"td">>,[],[<<"1">>]}, {<<"td">>,[],[<<"2">>]}, {<<"td">>,[], [<<"3">>]}]},
+            {<<"tr">>,[], [{<<"td">>,[],[<<"4">>]}, {<<"td">>,[],[<<"5">>]}, {<<"td">>,[],[<<"6">>]}]}]}]}, mochiweb_html:parse(D1)),
+
+    D2 = "<table><tfoot><tr><td>1<td>2</table",
+    ?assertEqual({<<"table">>,[], [{<<"tfoot">>,[], [
+        {<<"tr">>,[], [
+            {<<"td">>,[],[<<"1">>]},
+            {<<"td">>,[],[<<"2">>]}
+            ]}
+    ]}]}, mochiweb_html:parse(D2)),
+    ok.
+
+parse_table_colgroups_test() ->
+    D1 = "<table>"
+        "<colgroup width=\"20\">"
+        "<col span=\"39\">"
+        "<col id=\"co1l\">"
+        "<colgroup width=\"0*\">"
+        "<thead><tr><td>1<td>2<tr><td>2<td>3"
+        "<tbody><tr><td>1<td>2<td>3<tr><td>4<td>5<td>6"
+    "</table",
+
+    ?assertMatch({<<"table">>,[],
+        [{<<"colgroup">>,
+          [{<<"width">>,<<"20">>}],
+          [{<<"col">>,[{<<"span">>,<<"39">>}],[]},
+           {<<"col">>,[{<<"id">>,<<"co1l">>}],[]}]},
+         {<<"colgroup">>,[{<<"width">>,<<"0*">>}],[]},
+         {<<"thead">>,[],
+          [{<<"tr">>,[],[{<<"td">>,[],[<<"1">>]},{<<"td">>,[],[<<"2">>]}]},
+           {<<"tr">>,[],[{<<"td">>,[],[<<"2">>]},{<<"td">>,[],[<<"3">>]}]}]},
+         {<<"tbody">>,[],
+          [{<<"tr">>,[], [{<<"td">>,[],[<<"1">>]}, {<<"td">>,[],[<<"2">>]}, {<<"td">>,[],[<<"3">>]}]},
+           {<<"tr">>,[], [{<<"td">>,[],[<<"4">>]}, {<<"td">>,[],[<<"5">>]}, {<<"td">>,[],[<<"6">>]}]}]}]}, mochiweb_html:parse(D1)),
+
+    ok.
+
+parse_table_elements_without_table_test() ->
+    % Table elements are omitted when there is no table tag
+    D1 = "<html><tr><td>1<td>2</html>",
+    ?assertEqual({<<"html">>,[],[<<"1">>,<<"2">>]}, mochiweb_html:parse(D1)),
+    ok.
 
 -endif.
