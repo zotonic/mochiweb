@@ -414,7 +414,13 @@ stack(T1={TN, _, _}, Stack) when TN =:= <<"tr">> ->
 stack(T1={TN, _, _}, Stack) when TN =:= <<"tbody">> orelse TN =:= <<"thead">> orelse TN =:= <<"tfoot">> orelse TN =:= <<"colgroup">> ->
     case find_in_stack([<<"tbody">>, <<"thead">>, <<"tfoot">>, <<"colgroup">>], <<"table">>, Stack) of
         none -> Stack;
-        undefined -> [T1 | destack(<<"tr">>, Stack)];
+        undefined ->
+            %% Make sure we are not destacking a tr of a parent table
+            case find_in_stack([<<"tr">>], <<"table">>, Stack) of
+                %% none case is not possible.
+                undefined -> [T1 | Stack];
+                <<"tr">> -> [T1 | destack(<<"tr">>, Stack)]
+            end;
         Tag -> [T1 | destack(Tag, Stack)]
     end;
 stack(T1={TN0, _, _}, Stack=[{TN1, _, _} | _Rest])
@@ -426,7 +432,7 @@ stack(T1, Stack) ->
 
 find_in_stack(_CanClose, _Until, []) -> 
     none;
-find_in_stack(_CanClose, Until, [{Until, _,_}|_Rest]) -> 
+find_in_stack(_CanClose, Until, [{Until, _,_}|_Rest]) ->
     undefined;
 find_in_stack(CanClose, Until, [{TN, _,_}|Rest]) ->
     case lists:member(TN, CanClose) of
@@ -435,7 +441,7 @@ find_in_stack(CanClose, Until, [{TN, _,_}|Rest]) ->
     end;
 find_in_stack(CanClose, Until, [_|Rest]) ->
     find_in_stack(CanClose, Until, Rest).
-    
+
 append_stack_child(StartTag, [{Name, Attrs, Acc} | Stack]) ->
     [{Name, Attrs, [StartTag | Acc]} | Stack].
 
@@ -1928,5 +1934,73 @@ parse_table_elements_without_table_test() ->
     D1 = "<html><tr><td>1<td>2</html>",
     ?assertEqual({<<"html">>,[],[<<"1">>,<<"2">>]}, mochiweb_html:parse(D1)),
     ok.
+
+nested_table_test() ->
+    %% Nested table with tbody's
+    D = "<table>"
+            "<tbody>"
+                "<tr>"
+                    "<td>"
+                        "<table>"
+                           "<tbody>"
+                               "<tr><td>1</td><td>2</td></tr>"
+                               "<tr><td>3</td><td>4</td></tr>"
+                            "</tbody>"
+                         "</table>"
+                    "</td>"
+                    "<td>"
+                        "<table>"
+                           "<tbody>"
+                               "<tr><td>3</td></tr>"
+                               "<tr><td>4</td></tr>"
+                            "</tbody>"
+                        "</table>"
+                    "</td>"
+               "</tr>"
+           "</tbody>"
+       "</table>",
+
+    % All optional closing tags removed
+    D1 = "<table>"
+            "<tbody>"
+                "<tr>"
+                    "<td>"
+                        "<table>"
+                           "<tbody>"
+                               "<tr><td>1<td>2"
+                               "<tr><td>3<td>4"
+                         "</table>"
+                    "<td>"
+                        "<table>"
+                           "<tbody>"
+                               "<tr><td>3"
+                               "<tr><td>4"
+                        "</table>"
+       "</table>",
+
+    T = {<<"table">>,[],
+                  [{<<"tbody">>,[],
+                    [{<<"tr">>,[],
+                      [{<<"td">>,[],
+                        [{<<"table">>,[],
+                          [{<<"tbody">>,[],
+                            [{<<"tr">>,[], [{<<"td">>,[],[<<"1">>]},{<<"td">>,[],[<<"2">>]}]},
+                             {<<"tr">>,[], [{<<"td">>,[],[<<"3">>]},{<<"td">>,[],[<<"4">>]}]}]}]}]},
+                       {<<"td">>,[],
+                        [{<<"table">>,[],
+                          [{<<"tbody">>,[],
+                            [{<<"tr">>,[],[{<<"td">>,[],[<<"3">>]}]},
+                             {<<"tr">>,[],[{<<"td">>,[],[<<"4">>]}]}]}]}]}
+                      ]}
+                    ]}
+                  ]},
+
+    ?assertEqual(T, mochiweb_html:parse(D)),
+    ?assertEqual(T, mochiweb_html:parse(D1)),
+
+    ok.
+
+
+
 
 -endif.
