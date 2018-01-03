@@ -101,21 +101,21 @@ ensure_binary(L) when is_list(L) ->
 
 -spec encrypt_data(binary(), binary()) -> binary().
 encrypt_data(Data, Key) ->
-    IV = crypto:rand_bytes(16),
-    Crypt = crypto:aes_cfb_128_encrypt(Key, IV, Data),
+    IV = crypto:strong_rand_bytes(16),
+    Crypt = crypto:block_encrypt(aes_ecb, Key, IV, Data),
     <<IV/binary, Crypt/binary>>.
 
 -spec decrypt_data(binary(), binary()) -> binary().
 decrypt_data(<<IV:16/binary, Crypt/binary>>, Key) ->
-    crypto:aes_cfb_128_decrypt(Key, IV, Crypt).
+    crypto:block_decrypt(aes_ecb, Key, IV, Crypt).
 
 -spec gen_key(iolist(), iolist()) -> binary().
 gen_key(ExpirationTime, ServerKey)->
-    crypto:md5_mac(ServerKey, [ExpirationTime]).
+    crypto:hmac(md5, ServerKey, [ExpirationTime]).
 
 -spec gen_hmac(iolist(), binary(), iolist(), binary()) -> binary().
 gen_hmac(ExpirationTime, Data, SessionKey, Key) ->
-    crypto:sha_mac(Key, [ExpirationTime, Data, SessionKey]).
+    crypto:hmac(sha, Key, [ExpirationTime, Data, SessionKey]).
 
 
 -ifdef(TEST).
