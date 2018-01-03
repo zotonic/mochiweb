@@ -53,12 +53,23 @@ filter_unsecure_cipher_suites(Ciphers) ->
     lists:filter(fun is_secure/1, Ciphers).
 
 % Return true if the cipher spec is secure.
+-ifdef(has_maps).
+is_secure(Suite) when is_binary(Suite) ->
+    is_secure(ssl_cipher:suite_definition(Suite));
+is_secure({_KeyExchange, Cipher, MacHash}) ->
+    is_secure_cipher(Cipher) andalso is_secure_mac(MacHash);
+is_secure({_KeyExchange, Cipher, MacHash, _PrfHash}) ->
+    is_secure_cipher(Cipher) andalso is_secure_mac(MacHash);
+is_secure(Suite) when is_map(Suite) ->
+    is_secure_cipher(maps:get(cipher, Suite)) andalso is_secure_mac(maps:get(mac, Suite)).
+-else.
 is_secure(Suite) when is_binary(Suite) ->
     is_secure(ssl_cipher:suite_definition(Suite));
 is_secure({_KeyExchange, Cipher, MacHash}) ->
     is_secure_cipher(Cipher) andalso is_secure_mac(MacHash);
 is_secure({_KeyExchange, Cipher, MacHash, _PrfHash}) ->
     is_secure_cipher(Cipher) andalso is_secure_mac(MacHash).
+-endif.
 
 % Return true if the cipher algorithm is secure.
 is_secure_cipher(des_cbc) -> false;
