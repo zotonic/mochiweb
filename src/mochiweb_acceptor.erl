@@ -6,6 +6,8 @@
 -module(mochiweb_acceptor).
 -author('bob@mochimedia.com').
 
+-compile(tuple_calls).
+
 -include("internal.hrl").
 
 -export([start_link/3]).
