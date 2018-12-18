@@ -91,7 +91,17 @@ cookie(Key, Value, Options) ->
             _ ->
                 ""
         end,
-    CookieParts = [Cookie, ExpiresPart, SecurePart, DomainPart, PathPart, HttpOnlyPart],
+    SameSitePart =
+        case proplists:get_value(same_site, Options) of
+            undefined ->
+                "";
+            lax ->
+                "; SameSite=Lax";
+            strict ->
+                "; SameSite=Strict"
+        end,
+    CookieParts = [Cookie, ExpiresPart, SecurePart, DomainPart, PathPart,
+        HttpOnlyPart, SameSitePart],
     {"Set-Cookie", lists:flatten(CookieParts)}.
 
 
