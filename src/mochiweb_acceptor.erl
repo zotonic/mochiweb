@@ -26,9 +26,9 @@ init(Server, Listen, Loop) ->
             gen_server:cast(Server, {accepted, self(), timer:now_diff(os:timestamp(), T1)}),
 
             %% Perform a ssl handshake if needed.
-            ok = mochiweb_socket:handshake(Socket),
+            {ok, Socket1} = mochiweb_socket:finish_accept(Socket),
 
-            ?MODULE:call_loop(Loop, Socket);
+            ?MODULE:call_loop(Loop, Socket1);
         {error, timeout} ->
             ?MODULE:init(Server, Listen, Loop);
         {error, econnaborted} ->

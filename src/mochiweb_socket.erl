@@ -4,7 +4,7 @@
 
 -module(mochiweb_socket).
 
--export([listen/4, accept/1, transport_accept/1, handshake/1, recv/3, send/2, close/1, port/1, peername/1,
+-export([listen/4, accept/1, transport_accept/1, finish_accept/1, recv/3, send/2, close/1, port/1, peername/1,
          setopts/2, type/1]).
 
 -define(ACCEPT_TIMEOUT, 2000).
@@ -55,7 +55,7 @@ filter_unsecure_cipher_suites(Ciphers) ->
 % Return true if the cipher spec is secure.
 -ifdef(has_maps).
 is_secure(Suite) when is_binary(Suite) ->
-    is_secure(ssl_cipher:suite_definition(Suite));
+    is_secure(suite_definition(Suite));
 is_secure({_KeyExchange, Cipher, MacHash}) ->
     is_secure_cipher(Cipher) andalso is_secure_mac(MacHash);
 is_secure({_KeyExchange, Cipher, MacHash, _PrfHash}) ->
@@ -64,12 +64,21 @@ is_secure(Suite) when is_map(Suite) ->
     is_secure_cipher(maps:get(cipher, Suite)) andalso is_secure_mac(maps:get(mac, Suite)).
 -else.
 is_secure(Suite) when is_binary(Suite) ->
-    is_secure(ssl_cipher:suite_definition(Suite));
+    is_secure(suite_definition(Suite));
 is_secure({_KeyExchange, Cipher, MacHash}) ->
     is_secure_cipher(Cipher) andalso is_secure_mac(MacHash);
 is_secure({_KeyExchange, Cipher, MacHash, _PrfHash}) ->
     is_secure_cipher(Cipher) andalso is_secure_mac(MacHash).
 -endif.
+
+-ifdef(ssl_cipher_old).
+suite_definition(Suite) ->
+    ssl_cipher:suite_definition(Suite).
+-else.
+suite_definition(Suite) ->
+    ssl_cipher_format:suite_definition(Suite).
+-endif.
+
 
 % Return true if the cipher algorithm is secure.
 is_secure_cipher(des_cbc) -> false;
@@ -112,12 +121,7 @@ accept({ssl, ListenSocket}) ->
     % reason for the try...catch block. Should be fixed in OTP R14.
     try ssl:transport_accept(ListenSocket, ?SSL_TIMEOUT) of
         {ok, Socket} ->
-            case ssl:ssl_accept(Socket, ?SSL_HANDSHAKE_TIMEOUT) of
-                ok ->
-                    {ok, {ssl, Socket}};
-                {error, _} = Err ->
-                    Err
-            end;
+            finish_accept(Socket);
         {error, _} = Err ->
             Err
     catch
@@ -133,15 +137,15 @@ transport_accept({ssl, ListenSocket}) ->
             {ok, {ssl, Socket}};
         {error, _} = Err ->
             Err
-    end; 
+    end;
 transport_accept(ListenSocket) ->
     gen_tcp:accept(ListenSocket, ?ACCEPT_TIMEOUT).
 
-handshake({ssl, Socket}=S) ->
+-ifdef(ssl_handshake_unavailable).
+finish_accept({ssl, Socket} = S) ->
     case ssl:ssl_accept(Socket, ?SSL_HANDSHAKE_TIMEOUT) of
-        ok -> 
-            ok;
-
+        ok ->
+            {ok, {ssl, Socket}};
         %% Garbage was most likely sent to the socket, don't error out.
         {error, {tls_alert, _}} ->
             mochiweb_socket:close(S),
@@ -150,12 +154,33 @@ handshake({ssl, Socket}=S) ->
         {error, Reason} when Reason =:= timeout orelse Reason =:= closed ->
             mochiweb_socket:close(S),
             exit(normal);
-        {error, Reason} ->
+        {error, _} = Err ->
             mochiweb_socket:close(S),
-            exit({error, Reason})
+            exit(Err)
     end;
-handshake(_Socket) ->
-    ok.
+finish_accept(Socket) ->
+    {ok, Socket}.
+-else.
+finish_accept({ssl, Socket} = S) ->
+    case ssl:handshake(Socket, ?SSL_HANDSHAKE_TIMEOUT) of
+        {ok, SslSocket} ->
+            {ok, {ssl, SslSocket}};
+        %% Garbage was most likely sent to the socket, don't error out.
+        {error, {tls_alert, _}} ->
+            mochiweb_socket:close(S),
+            exit(normal);
+        %% Socket most likely stopped responding, don't error out.
+        {error, Reason} when Reason =:= timeout orelse Reason =:= closed ->
+            mochiweb_socket:close(S),
+            exit(normal);
+        {error, _} = Err ->
+            mochiweb_socket:close(S),
+            exit(Err)
+    end;
+finish_accept(Socket) ->
+    {ok, Socket}.
+-endif.
+
 
 recv({ssl, Socket}, Length, Timeout) ->
     ssl:recv(Socket, Length, Timeout);
