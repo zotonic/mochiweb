@@ -6,8 +6,6 @@
 -module(mochiweb_acceptor).
 -author('bob@mochimedia.com').
 
--compile(tuple_calls).
-
 -include("internal.hrl").
 
 -export([start_link/3]).
@@ -39,11 +37,11 @@ init(Server, Listen, Loop) ->
             exit({error, Other})
     end.
 
-call_loop({M, F}, Socket) ->
+call_loop({M, F}, Socket) when is_atom(M) ->
     M:F(Socket);
-call_loop({M, F, [A1]}, Socket) ->
+call_loop({M, F, [A1]}, Socket) when is_atom(M) ->
     M:F(Socket, A1);
-call_loop({M, F, A}, Socket) ->
+call_loop({M, F, A}, Socket) when is_atom(M) ->
     erlang:apply(M, F, [Socket | A]);
 call_loop(Loop, Socket) ->
     Loop(Socket).
