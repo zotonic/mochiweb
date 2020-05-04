@@ -75,8 +75,13 @@ is_secure({_KeyExchange, Cipher, MacHash, _PrfHash}) ->
 suite_definition(Suite) ->
     ssl_cipher:suite_definition(Suite).
 -else.
+-ifdef(otp_21).
 suite_definition(Suite) ->
     ssl_cipher_format:suite_definition(Suite).
+-else.
+suite_definition(Suite) ->
+    ssl_cipher_format:suite_bin_to_map(Suite).
+-endif.
 -endif.
 
 

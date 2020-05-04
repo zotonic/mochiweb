@@ -6,8 +6,6 @@
 -module(mochiweb_request).
 -author('bob@mochimedia.com').
 
--compile(tuple_calls).
-
 -include_lib("kernel/include/file.hrl").
 -include("internal.hrl").
 
@@ -366,7 +364,7 @@ ok({ContentType, Body}, {?MODULE, [_Socket, _Method, _RawPath, _Version, _Header
     ok({ContentType, [], Body}, THIS);
 ok({ContentType, ResponseHeaders, Body}, {?MODULE, [_Socket, _Method, _RawPath, _Version, _Headers]}=THIS) ->
     HResponse = mochiweb_headers:make(ResponseHeaders),
-    case THIS:get(range) of
+    case get(range, THIS) of
         X when (X =:= undefined orelse X =:= fail) orelse Body =:= chunked ->
             %% http://code.google.com/p/mochiweb/issues/detail?id=54
             %% Range header not supported when chunked, return 200 and provide

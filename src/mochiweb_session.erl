@@ -102,12 +102,12 @@ ensure_binary(L) when is_list(L) ->
 -spec encrypt_data(binary(), binary()) -> binary().
 encrypt_data(Data, Key) ->
     IV = crypto:strong_rand_bytes(16),
-    Crypt = crypto:block_encrypt(aes_ecb, Key, IV, Data),
+    Crypt = crypto:block_encrypt(aes_cfb128, Key, IV, Data),
     <<IV/binary, Crypt/binary>>.
 
 -spec decrypt_data(binary(), binary()) -> binary().
 decrypt_data(<<IV:16/binary, Crypt/binary>>, Key) ->
-    crypto:block_decrypt(aes_ecb, Key, IV, Crypt).
+    crypto:block_decrypt(aes_cfb128, Key, IV, Crypt).
 
 -spec gen_key(iolist(), iolist()) -> binary().
 gen_key(ExpirationTime, ServerKey)->
