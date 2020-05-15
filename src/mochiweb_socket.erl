@@ -27,14 +27,15 @@ listen(Ssl, Port, Opts, SslOpts) ->
             gen_tcp:listen(Port, Opts)
     end.
 
+-ifdef(ssl_filter_broken).
 add_unbroken_ciphers_default(Opts) ->
     Default = filter_unsecure_cipher_suites(default_ciphers()),
     Ciphers = filter_broken_cipher_suites(proplists:get_value(ciphers, Opts, Default)),
     [{ciphers, Ciphers} | proplists:delete(ciphers, Opts)].
 
 filter_broken_cipher_suites(Ciphers) ->
-	case proplists:get_value(ssl_app, ssl:versions()) of
-		"5.3" ++ _ ->
+    case proplists:get_value(ssl_app, ssl:versions()) of
+        "5.3" ++ _ ->
             lists:filter(fun is_unbroken_cipher/1, Ciphers);
         _ ->
             Ciphers
@@ -47,7 +48,6 @@ is_unbroken_cipher(Suite) ->
         "ecdh"++_ -> false;
         _ -> true
     end.
-
 
 filter_unsecure_cipher_suites(Ciphers) ->
     lists:filter(fun is_secure/1, Ciphers).
@@ -75,15 +75,10 @@ is_secure({_KeyExchange, Cipher, MacHash, _PrfHash}) ->
 suite_definition(Suite) ->
     ssl_cipher:suite_definition(Suite).
 -else.
--ifdef(otp_21).
+% OTP-21
 suite_definition(Suite) ->
     ssl_cipher_format:suite_definition(Suite).
--else.
-suite_definition(Suite) ->
-    ssl_cipher_format:suite_bin_to_map(Suite).
 -endif.
--endif.
-
 
 % Return true if the cipher algorithm is secure.
 is_secure_cipher(des_cbc) -> false;
@@ -93,6 +88,24 @@ is_secure_cipher(_) -> true.
 % Return true if the mac algorithm is secure.
 is_secure_mac(md5) -> false;
 is_secure_mac(_) -> true.
+
+% Get a list of default ciphers.
+%
+% Note: ssl:cipher_suites/0 does not return a usable set of ciphers. It returns
+% only ciphers usable by the highest protocol version. The problem is that it
+% doesn't return default_prf as prf algorithm, but a fixed one usable by tls 1.2
+% only.
+default_ciphers() ->
+    HighestProtocolVersion = tls_record:highest_protocol_version([]),
+    AllSuites = ssl_cipher:suites(HighestProtocolVersion),
+    ssl_cipher:filter_suites(AllSuites).
+
+-else.
+% OTP-22 and upwards are ok.
+add_unbroken_ciphers_default(Opts) ->
+    Opts.
+-endif.
+
 
 add_safe_protocol_versions(Opts) ->
     case proplists:is_defined(versions, Opts) of
@@ -109,17 +122,6 @@ filter_unsafe_protcol_versions(Versions) ->
                     (_) -> true
                  end,
                  Versions).
-
-% Get a list of default ciphers. 
-%
-% Note: ssl:cipher_suites/0 does not return a usable set of ciphers. It returns
-% only ciphers usable by the highest protocol version. The problem is that it 
-% doesn't return default_prf as prf algorithm, but a fixed one usable by tls 1.2
-% only.
-default_ciphers() -> 
-    HighestProtocolVersion = tls_record:highest_protocol_version([]),
-    AllSuites = ssl_cipher:suites(HighestProtocolVersion),
-    ssl_cipher:filter_suites(AllSuites).
 
 accept({ssl, ListenSocket}) ->
     % There's a bug in ssl:transport_accept/2 at the moment, which is the
