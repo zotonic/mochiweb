@@ -54,10 +54,10 @@ sort_cipher_suites(Suites) ->
     
 suite_sort_info(Suite) ->
   SuiteInfo = suite_definition(Suite),
-  {cipher_level(SuiteInfo),
-   has_ec_key_exchange(SuiteInfo),
+  {has_ec_key_exchange(SuiteInfo),
    has_aead(SuiteInfo),
    has_ecdsa(SuiteInfo),
+   cipher_level(SuiteInfo),
    effective_key_bits(SuiteInfo),
    hash_size(SuiteInfo)}.
 
