@@ -119,6 +119,8 @@ add_safe_protocol_versions(Opts) ->
 filter_unsafe_protcol_versions(Versions) ->
     lists:filter(fun
                     (sslv3) -> false;
+                    (tlsv1) -> false;
+                    ('tlsv1.1') -> false;
                     (_) -> true
                  end,
                  Versions).
