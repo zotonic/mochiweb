@@ -83,7 +83,10 @@ suite_definition(Suite) ->
 % Return true if the cipher algorithm is secure.
 is_secure_cipher(des_cbc) -> false;
 is_secure_cipher(rc4_128) -> false;
-is_secure_cipher(_) -> true.
+is_secure_cipher('3des_ede_cbc') -> false;
+is_secure_cipher(aes_128_cbc) -> false;
+is_secure_cipher(_) ->
+    true.
 
 % Return true if the mac algorithm is secure.
 is_secure_mac(md5) -> false;
