@@ -40,21 +40,22 @@ add_honor_cipher_order(Opts) ->
 -ifdef(ssl_filter_broken).
 add_unbroken_ciphers_default(Opts) ->
     Default = sort_cipher_suites(filter_unsecure_cipher_suites(default_ciphers())),
-    Ciphers = proplists:get_value(ciphers, Opts, Default),
+    io:fwrite(standard_error, "Default Ciphers: ~p~n", [[suite_definition(S) || S <- Default]]),
 
-    % io:fwrite(standard_error, "Ciphers: ~p~n", [[suite_definition(S) || S <- Ciphers]]),
+    Ciphers = proplists:get_value(ciphers, Opts, Default),
 
     [{ciphers, Ciphers} | proplists:delete(ciphers, Opts)].
 
 % Sort the cipher suite in more preferred secure order to less.
 sort_cipher_suites(Suites) ->
     lists:reverse(lists:sort(fun(A, B) ->
-                                     suite_sort_info(A) =< suite_definition(B)
+                                     suite_sort_info(A) =< suite_sort_info(B)
                              end, Suites)). 
     
 suite_sort_info(Suite) ->
   SuiteInfo = suite_definition(Suite),
-  {has_ec_key_exchange(SuiteInfo),
+  {cipher_level(SuiteInfo),
+   has_ec_key_exchange(SuiteInfo),
    has_aead(SuiteInfo),
    has_ecdsa(SuiteInfo),
    effective_key_bits(SuiteInfo),
@@ -83,6 +84,18 @@ has_ecdsa({KeyExchange, _, _, _}) -> has_ecdsa(KeyExchange);
 has_ecdsa(ecdhe_ecdsa) -> true;
 has_ecdsa(ecdh_ecdsa) -> true;
 has_ecdsa(_) -> false.
+
+cipher_level(Suite) when is_map(Suite) -> cipher_level(maps:get(cipher, Suite));
+cipher_level({_, Cipher, _}) -> cipher_level(Cipher);
+cipher_level({_, Cipher, _, _}) -> cipher_level(Cipher);
+cipher_level(null) -> 0;
+cipher_level(des_cbc) -> 0;
+cipher_level(rc4_128) -> 0;
+cipher_level('3des_ede_cbc') -> 1;
+cipher_level(aes_128_cbc) -> 2;
+cipher_level(aes_256_cbc) -> 2;
+cipher_level(aes_128_gcm) -> 3;
+cipher_level(aes_256_gcm) -> 3.
 
 effective_key_bits(Suite) when is_map(Suite)  -> effective_key_bits(maps:get(cipher, Suite));
 effective_key_bits({_, Cipher, _}) -> effective_key_bits(Cipher);
