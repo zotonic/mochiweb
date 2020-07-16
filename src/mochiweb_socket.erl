@@ -56,19 +56,19 @@ filter_unsecure_cipher_suites(Ciphers) ->
 -ifdef(has_maps).
 is_secure(Suite) when is_binary(Suite) ->
     is_secure(suite_definition(Suite));
-is_secure({_KeyExchange, Cipher, MacHash}) ->
-    is_secure_cipher(Cipher) andalso is_secure_mac(MacHash);
-is_secure({_KeyExchange, Cipher, MacHash, _PrfHash}) ->
-    is_secure_cipher(Cipher) andalso is_secure_mac(MacHash);
+is_secure({KeyExchange, Cipher, MacHash}) ->
+    is_secure_key_exchange(KeyExchange) andalso is_secure_cipher(Cipher) andalso is_secure_mac(MacHash);
+is_secure({KeyExchange, Cipher, MacHash, _PrfHash}) ->
+    is_secure_key_exchange(KeyExchange) andalso is_secure_cipher(Cipher) andalso is_secure_mac(MacHash);
 is_secure(Suite) when is_map(Suite) ->
-    is_secure_cipher(maps:get(cipher, Suite)) andalso is_secure_mac(maps:get(mac, Suite)).
+    is_secure_key_exchange(maps:get(key_exchange, Suite)) andalso is_secure_cipher(maps:get(cipher, Suite)) andalso is_secure_mac(maps:get(mac, Suite)).
 -else.
 is_secure(Suite) when is_binary(Suite) ->
     is_secure(suite_definition(Suite));
-is_secure({_KeyExchange, Cipher, MacHash}) ->
-    is_secure_cipher(Cipher) andalso is_secure_mac(MacHash);
-is_secure({_KeyExchange, Cipher, MacHash, _PrfHash}) ->
-    is_secure_cipher(Cipher) andalso is_secure_mac(MacHash).
+is_secure({KeyExchange, Cipher, MacHash}) ->
+    is_secure_key_exchange(KeyExchange) andalso is_secure_cipher(Cipher) andalso is_secure_mac(MacHash);
+is_secure({KeyExchange, Cipher, MacHash, PrfHash}) ->
+    is_secure_key_exchange(KeyExchange) andalso is_secure_cipher(Cipher) andalso is_secure_mac(MacHash).
 -endif.
 
 -ifdef(ssl_cipher_old).
@@ -80,6 +80,16 @@ suite_definition(Suite) ->
     ssl_cipher_format:suite_definition(Suite).
 -endif.
 
+% Return true if the key_exchange algorithm is secure
+
+is_secure_key_exchange(rsa) -> false; 
+is_secure_key_exchange(Alg) -> 
+    io:fwrite(standard_error, "key_exchange: ~p~n", [Alg]),
+    case atom_to_list(Alg) of
+        "ecdh_" ++ _ -> false;
+        _ -> true
+    end.
+
 % Return true if the cipher algorithm is secure.
 is_secure_cipher(des_cbc) -> false;
 is_secure_cipher(rc4_128) -> false;
@@ -90,7 +100,7 @@ is_secure_cipher(_) ->
 
 % Return true if the mac algorithm is secure.
 is_secure_mac(md5) -> false;
-is_secure_mac(_) -> true.
+is_secure_mac(Mac) -> true.
 
 % Get a list of default ciphers.
 %
