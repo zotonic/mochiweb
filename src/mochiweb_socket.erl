@@ -30,37 +30,73 @@ listen(Ssl, Port, Opts, SslOpts) ->
 -ifdef(ssl_filter_broken).
 add_unbroken_ciphers_default(Opts) ->
     Default = sort_cipher_suites(filter_unsecure_cipher_suites(default_ciphers())),
-    Ciphers = filter_broken_cipher_suites(proplists:get_value(ciphers, Opts, Default)),
+    Ciphers = proplists:get_value(ciphers, Opts, Default),
 
-    io:fwrite(standard_error, "Ciphers: ~p~n", [[suite_definition(S) || S <- Ciphers]]),
+    % io:fwrite(standard_error, "Ciphers: ~p~n", [[suite_definition(S) || S <- Ciphers]]),
 
     [{ciphers, Ciphers} | proplists:delete(ciphers, Opts)].
 
+% Sort the cipher suite in more preferred secure order to less.
 sort_cipher_suites(Suites) ->
-    Suites.
-
-    %lists:sort(fun(A, B) ->
-    %                   ADef = suite_definition(A),
-    %                   BDef = suite_definition(B),
-%
-%               end, Suites). 
+    lists:sort(fun(A, B) ->
+                       suite_sort_info(A) =< suite_definition(B)
+               end, Suites). 
     
+suite_sort_info(Suite) ->
+  SuiteInfo = suite_definition(Suite),
+  {has_ec_key_exchange(SuiteInfo),
+   has_aead(SuiteInfo),
+   has_ecdsa(SuiteInfo),
+   effective_key_bits(SuiteInfo),
+   hash_size(SuiteInfo)}.
 
-filter_broken_cipher_suites(Ciphers) ->
-    case proplists:get_value(ssl_app, ssl:versions()) of
-        "5.3" ++ _ ->
-            lists:filter(fun is_unbroken_cipher/1, Ciphers);
-        _ ->
-            Ciphers
+
+has_ec_key_exchange({KeyExchange, _, _}) -> has_ec_key_exchange(KeyExchange);
+has_ec_key_exchange({KeyExchange, _, _, _}) -> has_ec_key_exchange(KeyExchange);
+has_ec_key_exchange(Suite) when is_map(Suite) ->
+    has_ec_key_exchange(maps:get(key_exchange, Suite));
+has_ec_key_exchange(KeyExchange) when is_atom(KeyExchange) ->
+    case atom_to_list(KeyExchange) of
+        "ecdhe"++_ -> true;
+        _ -> false
     end.
 
-is_unbroken_cipher(Suite) when is_binary(Suite) ->
-    is_unbroken_cipher(ssl_cipher:suite_definition(Suite));
-is_unbroken_cipher(Suite) ->
-    case atom_to_list(element(1, Suite)) of
-        "ecdh"++_ -> false;
-        _ -> true
-    end.
+has_aead(SuiteInfo) when is_map(SuiteInfo) -> has_aead(maps:get(mac, SuiteInfo));
+has_aead({_, _, Mac}) -> has_aead(Mac);
+has_aead({_, _, Mac, _}) -> has_aead(Mac);
+has_aead(aead) -> true;
+has_aead(_) -> false.
+
+has_ecdsa(SuiteInfo) when is_map(SuiteInfo) -> has_ecdsa(maps:get(key_exchange, SuiteInfo));
+has_ecdsa({KeyExchange, _, _}) -> has_ecdsa(KeyExchange);
+has_ecdsa({KeyExchange, _, _, _}) -> has_ecdsa(KeyExchange);
+has_ecdsa(ecdhe_ecdsa) -> true;
+has_ecdsa(ecdh_ecdsa) -> true;
+has_ecdsa(_) -> false.
+
+effective_key_bits(Suite) when is_map(Suite)  -> effective_key_bits(maps:get(cipher, Suite));
+effective_key_bits({_, Cipher, _}) -> effective_key_bits(Cipher);
+effective_key_bits({_, Cipher, _, _}) -> effective_key_bits(Cipher);
+
+effective_key_bits(null) -> 0;
+effective_key_bits(des_cbc) -> 56;
+effective_key_bits(rc4_128) -> 128;
+effective_key_bits(aes_128_cbc) -> 128;
+effective_key_bits(aes_128_gcm) -> 128;
+effective_key_bits('3des_ede_cbc') -> 168;
+effective_key_bits('aes_256_cbc') -> 256;
+effective_key_bits('aes_256_gcm') -> 256.
+
+hash_size(SuiteInfo) when is_map(SuiteInfo) -> hash_size(maps:get(mac, SuiteInfo));
+hash_size({_, _, Mac}) -> hash_size(Mac);
+hash_size({_, _, Mac, _}) -> hash_size(Mac);
+hash_size(null) -> 0;
+hash_size(aead) -> 0;
+hash_size(md5) -> 16;
+hash_size(sha) -> 20;
+hash_size(sha256) -> 32;
+hash_size(sha384) -> 48.
+
 
 filter_unsecure_cipher_suites(Ciphers) ->
     lists:filter(fun is_secure/1, Ciphers).
@@ -87,10 +123,11 @@ suite_definition(Suite) ->
 % Return true if the key_exchange algorithm is secure
 is_secure_key_exchange(rsa) -> false; 
 is_secure_key_exchange(Alg) -> 
-    case atom_to_list(Alg) of
-        "ecdh_" ++ _ -> false;
-        _ -> true
-    end.
+    true.
+    %case atom_to_list(Alg) of
+    %    "ecdh_" ++ _ -> false;
+    %    _ -> true
+    %end.
 
 % Return true if the cipher algorithm is secure.
 is_secure_cipher(des_cbc) -> false;
@@ -115,7 +152,9 @@ default_ciphers() ->
 
 
 -else.
-% OTP-22 and upwards are ok.
+% OTP-22 and upwards are ok. 
+%
+% The default cipher suite is not sorted into more secure to less in this case.
 add_unbroken_ciphers_default(Opts) ->
     Opts.
 -endif.
@@ -251,7 +290,7 @@ type(_) ->
 -ifdef(TEST).
 -include_lib("eunit/include/eunit.hrl").
 
--ifdef(ssl_folter_broken).
+-ifdef(ssl_filter_broken).
 default_cipher_test() ->
     %% Make sure there are default ciphers.
     ?assert(length(default_ciphers()) > 0),
