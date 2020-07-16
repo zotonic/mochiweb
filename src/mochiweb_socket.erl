@@ -81,10 +81,8 @@ suite_definition(Suite) ->
 -endif.
 
 % Return true if the key_exchange algorithm is secure
-
 is_secure_key_exchange(rsa) -> false; 
 is_secure_key_exchange(Alg) -> 
-    io:fwrite(standard_error, "key_exchange: ~p~n", [Alg]),
     case atom_to_list(Alg) of
         "ecdh_" ++ _ -> false;
         _ -> true
@@ -95,8 +93,7 @@ is_secure_cipher(des_cbc) -> false;
 is_secure_cipher(rc4_128) -> false;
 is_secure_cipher('3des_ede_cbc') -> false;
 is_secure_cipher(aes_128_cbc) -> false;
-is_secure_cipher(_) ->
-    true.
+is_secure_cipher(_) -> true.
 
 % Return true if the mac algorithm is secure.
 is_secure_mac(md5) -> false;
