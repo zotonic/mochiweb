@@ -29,9 +29,22 @@ listen(Ssl, Port, Opts, SslOpts) ->
 
 -ifdef(ssl_filter_broken).
 add_unbroken_ciphers_default(Opts) ->
-    Default = filter_unsecure_cipher_suites(default_ciphers()),
+    Default = sort_cipher_suites(filter_unsecure_cipher_suites(default_ciphers())),
     Ciphers = filter_broken_cipher_suites(proplists:get_value(ciphers, Opts, Default)),
+
+    io:fwrite(standard_error, "Ciphers: ~p~n", [[suite_definition(S) || S <- Ciphers]]),
+
     [{ciphers, Ciphers} | proplists:delete(ciphers, Opts)].
+
+sort_cipher_suites(Suites) ->
+    Suites.
+
+    %lists:sort(fun(A, B) ->
+    %                   ADef = suite_definition(A),
+    %                   BDef = suite_definition(B),
+%
+%               end, Suites). 
+    
 
 filter_broken_cipher_suites(Ciphers) ->
     case proplists:get_value(ssl_app, ssl:versions()) of
@@ -53,7 +66,6 @@ filter_unsecure_cipher_suites(Ciphers) ->
     lists:filter(fun is_secure/1, Ciphers).
 
 % Return true if the cipher spec is secure.
--ifdef(has_maps).
 is_secure(Suite) when is_binary(Suite) ->
     is_secure(suite_definition(Suite));
 is_secure({KeyExchange, Cipher, MacHash}) ->
@@ -62,14 +74,6 @@ is_secure({KeyExchange, Cipher, MacHash, _PrfHash}) ->
     is_secure_key_exchange(KeyExchange) andalso is_secure_cipher(Cipher) andalso is_secure_mac(MacHash);
 is_secure(Suite) when is_map(Suite) ->
     is_secure_key_exchange(maps:get(key_exchange, Suite)) andalso is_secure_cipher(maps:get(cipher, Suite)) andalso is_secure_mac(maps:get(mac, Suite)).
--else.
-is_secure(Suite) when is_binary(Suite) ->
-    is_secure(suite_definition(Suite));
-is_secure({KeyExchange, Cipher, MacHash}) ->
-    is_secure_key_exchange(KeyExchange) andalso is_secure_cipher(Cipher) andalso is_secure_mac(MacHash);
-is_secure({KeyExchange, Cipher, MacHash, PrfHash}) ->
-    is_secure_key_exchange(KeyExchange) andalso is_secure_cipher(Cipher) andalso is_secure_mac(MacHash).
--endif.
 
 -ifdef(ssl_cipher_old).
 suite_definition(Suite) ->
@@ -92,12 +96,11 @@ is_secure_key_exchange(Alg) ->
 is_secure_cipher(des_cbc) -> false;
 is_secure_cipher(rc4_128) -> false;
 is_secure_cipher('3des_ede_cbc') -> false;
-is_secure_cipher(aes_128_cbc) -> false;
 is_secure_cipher(_) -> true.
 
 % Return true if the mac algorithm is secure.
 is_secure_mac(md5) -> false;
-is_secure_mac(Mac) -> true.
+is_secure_mac(_) -> true.
 
 % Get a list of default ciphers.
 %
@@ -109,6 +112,7 @@ default_ciphers() ->
     HighestProtocolVersion = tls_record:highest_protocol_version([]),
     AllSuites = ssl_cipher:suites(HighestProtocolVersion),
     ssl_cipher:filter_suites(AllSuites).
+
 
 -else.
 % OTP-22 and upwards are ok.
@@ -247,10 +251,12 @@ type(_) ->
 -ifdef(TEST).
 -include_lib("eunit/include/eunit.hrl").
 
+-ifdef(ssl_folter_broken).
 default_cipher_test() ->
     %% Make sure there are default ciphers.
     ?assert(length(default_ciphers()) > 0),
     ok.
+-endif.
 
 
 -endif.
