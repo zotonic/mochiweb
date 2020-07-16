@@ -38,9 +38,9 @@ add_unbroken_ciphers_default(Opts) ->
 
 % Sort the cipher suite in more preferred secure order to less.
 sort_cipher_suites(Suites) ->
-    lists:sort(fun(A, B) ->
-                       suite_sort_info(A) =< suite_definition(B)
-               end, Suites). 
+    lists:reverse(lists:sort(fun(A, B) ->
+                                     suite_sort_info(A) =< suite_definition(B)
+                             end, Suites)). 
     
 suite_sort_info(Suite) ->
   SuiteInfo = suite_definition(Suite),
