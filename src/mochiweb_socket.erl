@@ -17,7 +17,8 @@ listen(Ssl, Port, Opts, SslOpts) ->
         true ->
             Opts1 = add_unbroken_ciphers_default(Opts ++ SslOpts),
             Opts2 = add_safe_protocol_versions(Opts1),
-            case ssl:listen(Port, Opts2) of
+            Opts3 = add_honor_cipher_order(Opts2),
+            case ssl:listen(Port, Opts3) of
                 {ok, ListenSocket} ->
                     {ok, {ssl, ListenSocket}};
                 {error, _} = Err ->
@@ -25,6 +26,15 @@ listen(Ssl, Port, Opts, SslOpts) ->
             end;
         false ->
             gen_tcp:listen(Port, Opts)
+    end.
+
+% Add the honor_cipher_order flag when not set in the options. 
+add_honor_cipher_order(Opts) ->
+    case proplists:get_value(honor_cipher_order, Opts) of
+        undefined ->
+            [{honor_cipher_order, true} | Opts];
+        _ ->
+            Opts
     end.
 
 -ifdef(ssl_filter_broken).
