@@ -37,10 +37,11 @@ add_honor_cipher_order(Opts) ->
             Opts
     end.
 
+
 -ifdef(ssl_filter_broken).
 add_unbroken_ciphers_default(Opts) ->
     Default = sort_cipher_suites(filter_unsecure_cipher_suites(default_ciphers())),
-    io:fwrite(standard_error, "Default Ciphers: ~p~n", [[suite_definition(S) || S <- Default]]),
+    %io:fwrite(standard_error, "Default Ciphers: ~p~n", [[suite_definition(S) || S <- Default]]),
 
     Ciphers = proplists:get_value(ciphers, Opts, Default),
 
@@ -57,11 +58,12 @@ suite_sort_info(Suite) ->
   {has_ec_key_exchange(SuiteInfo),
    has_aead(SuiteInfo),
    has_ecdsa(SuiteInfo),
-   cipher_level(SuiteInfo),
    effective_key_bits(SuiteInfo),
+%   cipher_level(SuiteInfo),
    hash_size(SuiteInfo)}.
 
 
+% Return true if the suite has elliptic curve key exchange
 has_ec_key_exchange({KeyExchange, _, _}) -> has_ec_key_exchange(KeyExchange);
 has_ec_key_exchange({KeyExchange, _, _, _}) -> has_ec_key_exchange(KeyExchange);
 has_ec_key_exchange(Suite) when is_map(Suite) ->
@@ -72,12 +74,15 @@ has_ec_key_exchange(KeyExchange) when is_atom(KeyExchange) ->
         _ -> false
     end.
 
-has_aead(SuiteInfo) when is_map(SuiteInfo) -> has_aead(maps:get(mac, SuiteInfo));
-has_aead({_, _, Mac}) -> has_aead(Mac);
-has_aead({_, _, Mac, _}) -> has_aead(Mac);
-has_aead(aead) -> true;
+% Return true if the suite has authenticated encryption mode (like gcm)
+has_aead(SuiteInfo) when is_map(SuiteInfo) -> has_aead(maps:get(cipher, SuiteInfo));
+has_aead({_, Cipher, _}) -> has_aead(Cipher);
+has_aead({_, Cipher, _, _}) -> has_aead(Cipher);
+has_aead(aes_256_gcm) -> true;
+has_aead(aes_128_gcm) -> true;
 has_aead(_) -> false.
 
+% Return true if the suite has ecdsa 
 has_ecdsa(SuiteInfo) when is_map(SuiteInfo) -> has_ecdsa(maps:get(key_exchange, SuiteInfo));
 has_ecdsa({KeyExchange, _, _}) -> has_ecdsa(KeyExchange);
 has_ecdsa({KeyExchange, _, _, _}) -> has_ecdsa(KeyExchange);
@@ -97,10 +102,10 @@ cipher_level(aes_256_cbc) -> 2;
 cipher_level(aes_128_gcm) -> 3;
 cipher_level(aes_256_gcm) -> 3.
 
+% Return the key size of the suite. 
 effective_key_bits(Suite) when is_map(Suite)  -> effective_key_bits(maps:get(cipher, Suite));
 effective_key_bits({_, Cipher, _}) -> effective_key_bits(Cipher);
 effective_key_bits({_, Cipher, _, _}) -> effective_key_bits(Cipher);
-
 effective_key_bits(null) -> 0;
 effective_key_bits(des_cbc) -> 56;
 effective_key_bits(rc4_128) -> 128;
@@ -110,6 +115,7 @@ effective_key_bits('3des_ede_cbc') -> 168;
 effective_key_bits('aes_256_cbc') -> 256;
 effective_key_bits('aes_256_gcm') -> 256.
 
+% Return the hash size of the suite.
 hash_size(SuiteInfo) when is_map(SuiteInfo) -> hash_size(maps:get(mac, SuiteInfo));
 hash_size({_, _, Mac}) -> hash_size(Mac);
 hash_size({_, _, Mac, _}) -> hash_size(Mac);
@@ -145,14 +151,19 @@ suite_definition(Suite) ->
 
 % Return true if the key_exchange algorithm is secure
 is_secure_key_exchange(rsa) -> false; 
+is_secure_key_exchange(ecdh_rsa) -> false;   % Seldom used
+is_secure_key_exchange(ecdh_ecdsa) -> false; % 
 is_secure_key_exchange(Alg) -> 
+    %io:fwrite(standard_error, "Key-exchange: ~p~n", [Alg]),
     true.
+
     %case atom_to_list(Alg) of
     %    "ecdh_" ++ _ -> false;
     %    _ -> true
     %end.
 
 % Return true if the cipher algorithm is secure.
+is_secure_cipher(null) -> false;
 is_secure_cipher(des_cbc) -> false;
 is_secure_cipher(rc4_128) -> false;
 is_secure_cipher('3des_ede_cbc') -> false;
