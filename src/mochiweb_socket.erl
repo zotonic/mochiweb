@@ -37,29 +37,25 @@ add_honor_cipher_order(Opts) ->
             Opts
     end.
 
-
 -ifdef(ssl_filter_broken).
 add_unbroken_ciphers_default(Opts) ->
     Default = sort_cipher_suites(filter_unsecure_cipher_suites(default_ciphers())),
-    %io:fwrite(standard_error, "Default Ciphers: ~p~n", [[suite_definition(S) || S <- Default]]),
-
     Ciphers = proplists:get_value(ciphers, Opts, Default),
-
     [{ciphers, Ciphers} | proplists:delete(ciphers, Opts)].
 
-% Sort the cipher suite in more preferred secure order to less.
+% Sort the cipher suites in more preferred and secure order to less.
 sort_cipher_suites(Suites) ->
     lists:reverse(lists:sort(fun(A, B) ->
                                      suite_sort_info(A) =< suite_sort_info(B)
                              end, Suites)). 
     
+% Return the criteria based used for sorting the ciphers suites
 suite_sort_info(Suite) ->
   SuiteInfo = suite_definition(Suite),
-  {has_ec_key_exchange(SuiteInfo),
+  {has_ec_key_exchange(SuiteInfo), 
    has_aead(SuiteInfo),
    has_ecdsa(SuiteInfo),
    effective_key_bits(SuiteInfo),
-%   cipher_level(SuiteInfo),
    hash_size(SuiteInfo)}.
 
 
@@ -68,11 +64,9 @@ has_ec_key_exchange({KeyExchange, _, _}) -> has_ec_key_exchange(KeyExchange);
 has_ec_key_exchange({KeyExchange, _, _, _}) -> has_ec_key_exchange(KeyExchange);
 has_ec_key_exchange(Suite) when is_map(Suite) ->
     has_ec_key_exchange(maps:get(key_exchange, Suite));
-has_ec_key_exchange(KeyExchange) when is_atom(KeyExchange) ->
-    case atom_to_list(KeyExchange) of
-        "ecdhe"++_ -> true;
-        _ -> false
-    end.
+has_ec_key_exchange(ecdhe_rsa) -> true;
+has_ec_key_exchange(ecdhe_ecdsa) -> true;
+has_ec_key_exchange(_) -> false.
 
 % Return true if the suite has authenticated encryption mode (like gcm)
 has_aead(SuiteInfo) when is_map(SuiteInfo) -> has_aead(maps:get(cipher, SuiteInfo));
@@ -89,18 +83,6 @@ has_ecdsa({KeyExchange, _, _, _}) -> has_ecdsa(KeyExchange);
 has_ecdsa(ecdhe_ecdsa) -> true;
 has_ecdsa(ecdh_ecdsa) -> true;
 has_ecdsa(_) -> false.
-
-cipher_level(Suite) when is_map(Suite) -> cipher_level(maps:get(cipher, Suite));
-cipher_level({_, Cipher, _}) -> cipher_level(Cipher);
-cipher_level({_, Cipher, _, _}) -> cipher_level(Cipher);
-cipher_level(null) -> 0;
-cipher_level(des_cbc) -> 0;
-cipher_level(rc4_128) -> 0;
-cipher_level('3des_ede_cbc') -> 1;
-cipher_level(aes_128_cbc) -> 2;
-cipher_level(aes_256_cbc) -> 2;
-cipher_level(aes_128_gcm) -> 3;
-cipher_level(aes_256_gcm) -> 3.
 
 % Return the key size of the suite. 
 effective_key_bits(Suite) when is_map(Suite)  -> effective_key_bits(maps:get(cipher, Suite));
@@ -126,7 +108,7 @@ hash_size(sha) -> 20;
 hash_size(sha256) -> 32;
 hash_size(sha384) -> 48.
 
-
+% Remove suites with insecure ciphers
 filter_unsecure_cipher_suites(Ciphers) ->
     lists:filter(fun is_secure/1, Ciphers).
 
@@ -153,14 +135,7 @@ suite_definition(Suite) ->
 is_secure_key_exchange(rsa) -> false; 
 is_secure_key_exchange(ecdh_rsa) -> false;   % Seldom used
 is_secure_key_exchange(ecdh_ecdsa) -> false; % 
-is_secure_key_exchange(Alg) -> 
-    %io:fwrite(standard_error, "Key-exchange: ~p~n", [Alg]),
-    true.
-
-    %case atom_to_list(Alg) of
-    %    "ecdh_" ++ _ -> false;
-    %    _ -> true
-    %end.
+is_secure_key_exchange(_) -> true.
 
 % Return true if the cipher algorithm is secure.
 is_secure_cipher(null) -> false;
@@ -184,12 +159,12 @@ default_ciphers() ->
     AllSuites = ssl_cipher:suites(HighestProtocolVersion),
     ssl_cipher:filter_suites(AllSuites).
 
-
 -else.
 % OTP-22 and upwards are ok. 
 %
-% The default cipher suite is not sorted into more secure to less in this case.
 add_unbroken_ciphers_default(Opts) ->
+    % The default cipher suite has no broken ciphers, but it is not sorted more secure to less
+    % when OTP-22 and upwards is used.
     Opts.
 -endif.
 
