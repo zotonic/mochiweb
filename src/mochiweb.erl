@@ -97,6 +97,9 @@ ensure_started(App) ->
 
 -record(treq, {path, body= <<>>, xreply= <<>>}).
 
+tuple_apply(Module, F, Args) when is_tuple(Module), is_atom(element(1, Module)) ->
+     erlang:apply(element(1, Module), F, Args ++ [Module]).
+
 ssl_cert_opts() ->
     EbinDir = filename:dirname(code:which(?MODULE)),
     CertDir = filename:join([EbinDir, "..", "support", "test-materials"]),
@@ -188,8 +191,8 @@ selective_receive_test() ->
                     %% Let the server fun send a message to itself... It should not
                     %% not influence receiving of normal socket messages.
                     self() ! bla_bla,
-                    Reply = ReplyPrefix ++ Req:get(path),
-                    Req:ok({"text/plain", Reply})
+                    Reply = ReplyPrefix ++ tuple_apply(Req, get, [path]),
+                    tuple_apply(Req, ok, [{"text/plain", Reply}])
                 end,
     TestReqs = [begin
                     Path = PathPrefix ++ integer_to_list(N),
@@ -204,8 +207,8 @@ do_GET(Transport, Times) ->
     PathPrefix = "/whatever/",
     ReplyPrefix = "You requested: ",
     ServerFun = fun (Req) ->
-                        Reply = ReplyPrefix ++ Req:get(path),
-                        Req:ok({"text/plain", Reply})
+                        Reply = ReplyPrefix ++ tuple_apply(Req, get, [path]),
+                        tuple_apply(Req, ok, [{"text/plain", Reply}])
                 end,
     TestReqs = [begin
                     Path = PathPrefix ++ integer_to_list(N),
@@ -218,9 +221,9 @@ do_GET(Transport, Times) ->
 
 do_POST(Transport, Size, Times) ->
     ServerFun = fun (Req) ->
-                        Body = Req:recv_body(),
+                        Body = tuple_apply(Req, recv_body, []),
                         Headers = [{"Content-Type", "application/octet-stream"}],
-                        Req:respond({201, Headers, Body})
+                        tuple_apply(Req, respond, [{201, Headers, Body}])
                 end,
     TestReqs = [begin
                     Path = "/stuff/" ++ integer_to_list(N),

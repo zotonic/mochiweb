@@ -17,7 +17,8 @@ listen(Ssl, Port, Opts, SslOpts) ->
         true ->
             Opts1 = add_unbroken_ciphers_default(Opts ++ SslOpts),
             Opts2 = add_safe_protocol_versions(Opts1),
-            case ssl:listen(Port, Opts2) of
+            Opts3 = add_honor_cipher_order(Opts2),
+            case ssl:listen(Port, Opts3) of
                 {ok, ListenSocket} ->
                     {ok, {ssl, ListenSocket}};
                 {error, _} = Err ->
@@ -27,49 +28,99 @@ listen(Ssl, Port, Opts, SslOpts) ->
             gen_tcp:listen(Port, Opts)
     end.
 
+% Add the honor_cipher_order flag when not set in the options. 
+add_honor_cipher_order(Opts) ->
+    case proplists:get_value(honor_cipher_order, Opts) of
+        undefined ->
+            [{honor_cipher_order, true} | Opts];
+        _ ->
+            Opts
+    end.
+
 -ifdef(ssl_filter_broken).
 add_unbroken_ciphers_default(Opts) ->
-    Default = filter_unsecure_cipher_suites(default_ciphers()),
-    Ciphers = filter_broken_cipher_suites(proplists:get_value(ciphers, Opts, Default)),
+    Default = sort_cipher_suites(filter_unsecure_cipher_suites(default_ciphers())),
+    Ciphers = proplists:get_value(ciphers, Opts, Default),
     [{ciphers, Ciphers} | proplists:delete(ciphers, Opts)].
 
-filter_broken_cipher_suites(Ciphers) ->
-    case proplists:get_value(ssl_app, ssl:versions()) of
-        "5.3" ++ _ ->
-            lists:filter(fun is_unbroken_cipher/1, Ciphers);
-        _ ->
-            Ciphers
-    end.
+% Sort the cipher suites in more preferred and secure order to less.
+sort_cipher_suites(Suites) ->
+    lists:reverse(lists:sort(fun(A, B) ->
+                                     suite_sort_info(A) =< suite_sort_info(B)
+                             end, Suites)). 
+    
+% Return the criteria based used for sorting the ciphers suites
+suite_sort_info(Suite) ->
+  SuiteInfo = suite_definition(Suite),
+  {has_ec_key_exchange(SuiteInfo), 
+   has_aead(SuiteInfo),
+   has_ecdsa(SuiteInfo),
+   effective_key_bits(SuiteInfo),
+   hash_size(SuiteInfo)}.
 
-is_unbroken_cipher(Suite) when is_binary(Suite) ->
-    is_unbroken_cipher(ssl_cipher:suite_definition(Suite));
-is_unbroken_cipher(Suite) ->
-    case atom_to_list(element(1, Suite)) of
-        "ecdh"++_ -> false;
-        _ -> true
-    end.
 
+% Return true if the suite has elliptic curve key exchange
+has_ec_key_exchange({KeyExchange, _, _}) -> has_ec_key_exchange(KeyExchange);
+has_ec_key_exchange({KeyExchange, _, _, _}) -> has_ec_key_exchange(KeyExchange);
+has_ec_key_exchange(Suite) when is_map(Suite) ->
+    has_ec_key_exchange(maps:get(key_exchange, Suite));
+has_ec_key_exchange(ecdhe_rsa) -> true;
+has_ec_key_exchange(ecdhe_ecdsa) -> true;
+has_ec_key_exchange(_) -> false.
+
+% Return true if the suite has authenticated encryption mode (like gcm)
+has_aead(SuiteInfo) when is_map(SuiteInfo) -> has_aead(maps:get(cipher, SuiteInfo));
+has_aead({_, Cipher, _}) -> has_aead(Cipher);
+has_aead({_, Cipher, _, _}) -> has_aead(Cipher);
+has_aead(aes_256_gcm) -> true;
+has_aead(aes_128_gcm) -> true;
+has_aead(_) -> false.
+
+% Return true if the suite has ecdsa 
+has_ecdsa(SuiteInfo) when is_map(SuiteInfo) -> has_ecdsa(maps:get(key_exchange, SuiteInfo));
+has_ecdsa({KeyExchange, _, _}) -> has_ecdsa(KeyExchange);
+has_ecdsa({KeyExchange, _, _, _}) -> has_ecdsa(KeyExchange);
+has_ecdsa(ecdhe_ecdsa) -> true;
+has_ecdsa(ecdh_ecdsa) -> true;
+has_ecdsa(_) -> false.
+
+% Return the key size of the suite. 
+effective_key_bits(Suite) when is_map(Suite)  -> effective_key_bits(maps:get(cipher, Suite));
+effective_key_bits({_, Cipher, _}) -> effective_key_bits(Cipher);
+effective_key_bits({_, Cipher, _, _}) -> effective_key_bits(Cipher);
+effective_key_bits(null) -> 0;
+effective_key_bits(des_cbc) -> 56;
+effective_key_bits(rc4_128) -> 128;
+effective_key_bits(aes_128_cbc) -> 128;
+effective_key_bits(aes_128_gcm) -> 128;
+effective_key_bits('3des_ede_cbc') -> 168;
+effective_key_bits('aes_256_cbc') -> 256;
+effective_key_bits('aes_256_gcm') -> 256.
+
+% Return the hash size of the suite.
+hash_size(SuiteInfo) when is_map(SuiteInfo) -> hash_size(maps:get(mac, SuiteInfo));
+hash_size({_, _, Mac}) -> hash_size(Mac);
+hash_size({_, _, Mac, _}) -> hash_size(Mac);
+hash_size(null) -> 0;
+hash_size(aead) -> 0;
+hash_size(md5) -> 16;
+hash_size(sha) -> 20;
+hash_size(sha256) -> 32;
+hash_size(sha384) -> 48.
+
+% Remove suites with insecure ciphers
 filter_unsecure_cipher_suites(Ciphers) ->
     lists:filter(fun is_secure/1, Ciphers).
 
 % Return true if the cipher spec is secure.
--ifdef(has_maps).
 is_secure(Suite) when is_binary(Suite) ->
     is_secure(suite_definition(Suite));
-is_secure({_KeyExchange, Cipher, MacHash}) ->
-    is_secure_cipher(Cipher) andalso is_secure_mac(MacHash);
-is_secure({_KeyExchange, Cipher, MacHash, _PrfHash}) ->
-    is_secure_cipher(Cipher) andalso is_secure_mac(MacHash);
+is_secure({KeyExchange, Cipher, MacHash}) ->
+    is_secure_key_exchange(KeyExchange) andalso is_secure_cipher(Cipher) andalso is_secure_mac(MacHash);
+is_secure({KeyExchange, Cipher, MacHash, _PrfHash}) ->
+    is_secure_key_exchange(KeyExchange) andalso is_secure_cipher(Cipher) andalso is_secure_mac(MacHash);
 is_secure(Suite) when is_map(Suite) ->
-    is_secure_cipher(maps:get(cipher, Suite)) andalso is_secure_mac(maps:get(mac, Suite)).
--else.
-is_secure(Suite) when is_binary(Suite) ->
-    is_secure(suite_definition(Suite));
-is_secure({_KeyExchange, Cipher, MacHash}) ->
-    is_secure_cipher(Cipher) andalso is_secure_mac(MacHash);
-is_secure({_KeyExchange, Cipher, MacHash, _PrfHash}) ->
-    is_secure_cipher(Cipher) andalso is_secure_mac(MacHash).
--endif.
+    is_secure_key_exchange(maps:get(key_exchange, Suite)) andalso is_secure_cipher(maps:get(cipher, Suite)) andalso is_secure_mac(maps:get(mac, Suite)).
 
 -ifdef(ssl_cipher_old).
 suite_definition(Suite) ->
@@ -80,9 +131,17 @@ suite_definition(Suite) ->
     ssl_cipher_format:suite_definition(Suite).
 -endif.
 
+% Return true if the key_exchange algorithm is secure
+is_secure_key_exchange(rsa) -> false; 
+is_secure_key_exchange(ecdh_rsa) -> false;   % Seldom used
+is_secure_key_exchange(ecdh_ecdsa) -> false; % 
+is_secure_key_exchange(_) -> true.
+
 % Return true if the cipher algorithm is secure.
+is_secure_cipher(null) -> false;
 is_secure_cipher(des_cbc) -> false;
 is_secure_cipher(rc4_128) -> false;
+is_secure_cipher('3des_ede_cbc') -> false;
 is_secure_cipher(_) -> true.
 
 % Return true if the mac algorithm is secure.
@@ -101,8 +160,11 @@ default_ciphers() ->
     ssl_cipher:filter_suites(AllSuites).
 
 -else.
-% OTP-22 and upwards are ok.
+% OTP-22 and upwards are ok. 
+%
 add_unbroken_ciphers_default(Opts) ->
+    % The default cipher suite has no broken ciphers, but it is not sorted more secure to less
+    % when OTP-22 and upwards is used.
     Opts.
 -endif.
 
@@ -119,6 +181,8 @@ add_safe_protocol_versions(Opts) ->
 filter_unsafe_protcol_versions(Versions) ->
     lists:filter(fun
                     (sslv3) -> false;
+                    (tlsv1) -> false;
+                    ('tlsv1.1') -> false;
                     (_) -> true
                  end,
                  Versions).
@@ -235,10 +299,12 @@ type(_) ->
 -ifdef(TEST).
 -include_lib("eunit/include/eunit.hrl").
 
+-ifdef(ssl_filter_broken).
 default_cipher_test() ->
     %% Make sure there are default ciphers.
     ?assert(length(default_ciphers()) > 0),
     ok.
+-endif.
 
 
 -endif.
