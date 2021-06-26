@@ -95,7 +95,8 @@ effective_key_bits(aes_128_cbc) -> 128;
 effective_key_bits(aes_128_gcm) -> 128;
 effective_key_bits('3des_ede_cbc') -> 168;
 effective_key_bits('aes_256_cbc') -> 256;
-effective_key_bits('aes_256_gcm') -> 256.
+effective_key_bits('aes_256_gcm') -> 256;
+effective_key_bits(_) -> 256.
 
 % Return the hash size of the suite.
 hash_size(SuiteInfo) when is_map(SuiteInfo) -> hash_size(maps:get(mac, SuiteInfo));
