@@ -87,7 +87,8 @@ rngchars(N) ->
     [rngchar() | rngchars(N - 1)].
 
 rngchar() ->
-    rngchar(crypto:rand_uniform(0, tuple_size(?SAFE_CHARS))).
+    % rand is not secure, but here it is only used for tmp filenames
+    rngchar(rand:uniform(tuple_size(?SAFE_CHARS)) - 1).
 
 rngchar(C) ->
     element(1 + C, ?SAFE_CHARS).

@@ -102,20 +102,24 @@ ensure_binary(L) when is_list(L) ->
 -spec encrypt_data(binary(), binary()) -> binary().
 encrypt_data(Data, Key) ->
     IV = crypto:strong_rand_bytes(16),
-    Crypt = crypto:block_encrypt(aes_cfb128, Key, IV, Data),
+    Crypt = crypto:crypto_one_time(cipher(Key), Key, IV, Data, true),
     <<IV/binary, Crypt/binary>>.
 
 -spec decrypt_data(binary(), binary()) -> binary().
 decrypt_data(<<IV:16/binary, Crypt/binary>>, Key) ->
-    crypto:block_decrypt(aes_cfb128, Key, IV, Crypt).
+    crypto:crypto_one_time(cipher(Key), Key, IV, Crypt, false).
+
+cipher(Key) when byte_size(Key) =:= 16 -> aes_128_cfb128;
+cipher(Key) when byte_size(Key) =:= 24 -> aes_192_cfb128;
+cipher(Key) when byte_size(Key) =:= 32 -> aes_256_cfb128.
 
 -spec gen_key(iolist(), iolist()) -> binary().
 gen_key(ExpirationTime, ServerKey)->
-    crypto:hmac(md5, ServerKey, [ExpirationTime]).
+    crypto:mac(hmac, md5, ServerKey, [ExpirationTime]).
 
 -spec gen_hmac(iolist(), binary(), iolist(), binary()) -> binary().
 gen_hmac(ExpirationTime, Data, SessionKey, Key) ->
-    crypto:hmac(sha, Key, [ExpirationTime, Data, SessionKey]).
+    crypto:mac(hmac, sha, Key, [ExpirationTime, Data, SessionKey]).
 
 
 -ifdef(TEST).
