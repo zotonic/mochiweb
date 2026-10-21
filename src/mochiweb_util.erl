@@ -725,8 +725,8 @@ parse_header_test() ->
 
 guess_mime_test() ->
     "text/plain" = guess_mime(""),
-    "text/plain" = guess_mime(".text"),
-    "application/zip" = guess_mime(".zip"),
+    "text/plain" = guess_mime("test.text"),
+    "application/zip" = guess_mime("test.zip"),
     "application/zip" = guess_mime("x.zip"),
     "text/html" = guess_mime("x.html"),
     "application/xhtml+xml" = guess_mime("x.xhtml"),

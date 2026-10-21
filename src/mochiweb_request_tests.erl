@@ -151,10 +151,8 @@ accepted_content_types_test() ->
 
 should_close_test() ->
     F = fun (V, H) ->
-                (mochiweb_request:new(
-                   nil, 'GET', "/", V,
-                   mochiweb_headers:make(H)
-                  )):should_close()
+                Req = mochiweb_request:new(nil, 'GET', "/", V, mochiweb_headers:make(H)),
+                mochiweb_request:should_close(Req)
         end,
     ?assertEqual(
        true,

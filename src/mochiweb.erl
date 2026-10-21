@@ -125,7 +125,7 @@ with_server(Transport, ServerFun, ClientFun) ->
 
 request_test() ->
     R = mochiweb_request:new(z, z, "/foo/bar/baz%20wibble+quux?qs=2", z, []),
-    "/foo/bar/baz wibble quux" = R:get(path),
+    "/foo/bar/baz wibble quux" = mochiweb_request:get(path, R),
     ok.
 
 -define(LARGE_TIMEOUT, 60).
@@ -254,7 +254,7 @@ client_request(Transport, Port, Method, TestReqs) ->
                     inet:setopts(Socket, L)
             end;
         ssl ->
-            {ok, Socket} = ssl:connect("127.0.0.1", Port, [{ssl_imp, new} | Opts]),
+            {ok, Socket} = ssl:connect("127.0.0.1", Port, [{ssl_imp, new}, {verify, verify_none} | Opts]),
             fun (recv) ->
                     ssl:recv(Socket, 0);
                 ({recv, Length}) ->
