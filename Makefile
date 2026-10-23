@@ -1,24 +1,21 @@
+PREFIX := ../
+DEST   := $(PREFIX)$(PROJECT)
 
-PREFIX:=../
-DEST:=$(PREFIX)$(PROJECT)
+ERL         ?= erl
+REBAR       ?= ./rebar3
+REBAR_URL   ?= https://github.com/erlang/rebar3/releases/download/3.27.3/rebar3
+REBAR_SHA256 = f1d87d78decfc56b87d971c75ee6355698ec0c49fadd57f2c056043b7ca291b5
 
-REBAR        ?= ./rebar3
-REBAR_URL    := https://github.com/erlang/rebar3/releases/download/3.21.0/rebar3
-
-.PHONY: all deps
-
-./rebar3:
-	$(ERL) -noshell -s inets -s ssl \
-	  -eval '{ok, saved_to_file} = httpc:request(get, {"$(REBAR_URL)", []}, [], [{stream, "./rebar3"}])' \
-	  -s init stop
-	chmod +x ./rebar3
+.PHONY: all edoc test clean dialyzer app
 
 all: $(REBAR)
-	@$(REBAR) get-deps
 	@$(REBAR) compile
 
+./rebar3:
+	./tools/download.escript $(REBAR_URL) ./rebar3 --sha256 $(REBAR_SHA256) --executable
+
 edoc: $(REBAR)
-	@$(REBAR) doc
+	@$(REBAR) edoc
 
 test: $(REBAR)
 	@$(REBAR) eunit
@@ -26,12 +23,8 @@ test: $(REBAR)
 clean: $(REBAR)
 	@$(REBAR) clean
 
-build_plt: $(REBAR)
-	@$(REBAR) build-plt
-
-dialyzer:
-	@$(REBAR) dialyze
+dialyzer: $(REBAR)
+	@$(REBAR) dialyzer
 
 app: $(REBAR)
-	@$(REBAR) create template=mochiwebapp dest=$(DEST) appid=$(PROJECT)
-
+	@cd $(PREFIX) && $(abspath $(REBAR)) new mochiwebapp $(PROJECT)
