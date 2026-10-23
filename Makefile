@@ -2,28 +2,36 @@
 PREFIX:=../
 DEST:=$(PREFIX)$(PROJECT)
 
-REBAR=./rebar
+REBAR        ?= ./rebar3
+REBAR_URL    := https://github.com/erlang/rebar3/releases/download/3.21.0/rebar3
 
-all:
-	@$(REBAR) get-deps compile
+.PHONY: all deps
 
-edoc:
+./rebar3:
+	$(ERL) -noshell -s inets -s ssl \
+	  -eval '{ok, saved_to_file} = httpc:request(get, {"$(REBAR_URL)", []}, [], [{stream, "./rebar3"}])' \
+	  -s init stop
+	chmod +x ./rebar3
+
+all: $(REBAR)
+	@$(REBAR) get-deps
+	@$(REBAR) compile
+
+edoc: $(REBAR)
 	@$(REBAR) doc
 
-test:
-	@rm -rf .eunit
-	@mkdir -p .eunit
-	@$(REBAR) skip_deps=true eunit
+test: $(REBAR)
+	@$(REBAR) eunit
 
-clean:
+clean: $(REBAR)
 	@$(REBAR) clean
 
-build_plt:
+build_plt: $(REBAR)
 	@$(REBAR) build-plt
 
 dialyzer:
 	@$(REBAR) dialyze
 
-app:
+app: $(REBAR)
 	@$(REBAR) create template=mochiwebapp dest=$(DEST) appid=$(PROJECT)
 
