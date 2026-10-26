@@ -1,29 +1,37 @@
+PREFIX := ../
+DEST   := $(PREFIX)$(PROJECT)
 
-PREFIX:=../
-DEST:=$(PREFIX)$(PROJECT)
+ERL         ?= erl
 
-REBAR=./rebar
+REBAR := ./rebar3
+REBAR_URL := https://github.com/erlang/rebar3/releases/download/3.27.3/rebar3
+REBAR_SHA256 := f1d87d78decfc56b87d971c75ee6355698ec0c49fadd57f2c056043b7ca291b5
+REBAR_STAMP := ./.rebar3-$(REBAR_SHA256)
 
-all:
-	@$(REBAR) get-deps compile
+.PHONY: all edoc test clean dialyzer app
 
-edoc:
-	@$(REBAR) doc
+all: $(REBAR)
+	@$(REBAR) compile
 
-test:
-	@rm -rf .eunit
-	@mkdir -p .eunit
-	@$(REBAR) skip_deps=true eunit
+$(REBAR_STAMP):
+	rm -f ./.rebar-*
+	touch $@
+	rm -f $(REBAR)
 
-clean:
+$(REBAR): $(REBAR_STAMP)
+	./tools/download.escript "$(REBAR_URL)" "$(REBAR)" --sha256 "$(REBAR_SHA256)" --executable
+
+edoc: $(REBAR)
+	@$(REBAR) edoc
+
+test: $(REBAR)
+	@$(REBAR) eunit
+
+clean: $(REBAR)
 	@$(REBAR) clean
 
-build_plt:
-	@$(REBAR) build-plt
+dialyzer: $(REBAR)
+	@$(REBAR) dialyzer
 
-dialyzer:
-	@$(REBAR) dialyze
-
-app:
-	@$(REBAR) create template=mochiwebapp dest=$(DEST) appid=$(PROJECT)
-
+app: $(REBAR)
+	@cd $(PREFIX) && $(abspath $(REBAR)) new mochiwebapp $(PROJECT)

@@ -101,8 +101,8 @@ tuple_apply(Module, F, Args) when is_tuple(Module), is_atom(element(1, Module)) 
      erlang:apply(element(1, Module), F, Args ++ [Module]).
 
 ssl_cert_opts() ->
-    EbinDir = filename:dirname(code:which(?MODULE)),
-    CertDir = filename:join([EbinDir, "..", "support", "test-materials"]),
+    PrivDir = code:priv_dir(mochiweb),
+    CertDir = filename:join([PrivDir, "test-materials"]),
     CertFile = filename:join(CertDir, "test_ssl_cert.pem"),
     KeyFile = filename:join(CertDir, "test_ssl_key.pem"),
     [{certfile, CertFile}, {keyfile, KeyFile}].
