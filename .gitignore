@@ -8,4 +8,6 @@
 /TEST-*.xml
 /deps
 *.swp
+.rebar
+.rebar3-*
 rebar3
